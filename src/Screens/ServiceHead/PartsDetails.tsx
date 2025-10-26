@@ -1,0 +1,887 @@
+// PartsDetails.tsx
+import React, { useState, useEffect } from "react";
+import {
+    View,
+    Text,
+    TouchableOpacity,
+    StyleSheet,
+    TextInput,
+    Modal,
+    FlatList,
+    ScrollView,
+    Alert
+} from "react-native";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import { Header } from "../Header";
+import { maintenanceApi } from "../../api/maintenanceApi"; // Adjust path as needed
+
+const PartsDetails = ({ navigation, route }: any) => {
+    const [searchText, setSearchText] = useState("");
+    const [showAddForm, setShowAddForm] = useState(false);
+    const [showApproveDrawer, setShowApproveDrawer] = useState(false);
+    const [selectedParts, setSelectedParts] = useState<any[]>([]);
+    const [partNumber, setPartNumber] = useState("");
+    const [quantity, setQuantity] = useState("");
+    const [activeTab, setActiveTab] = useState("all");
+    const [statusFilter, setStatusFilter] = useState("all");
+    const [approveQuantities, setApproveQuantities] = useState<{ [key: string]: string }>({});
+
+    // Get serviceSalePersons data from navigation params
+    const { serviceSalePersons } = route.params || [];
+
+    console.log("Service Sale Persons Received:", serviceSalePersons);
+
+    // Convert data to the format expected by the component
+    const [partsData, setPartsData] = useState<any[]>([]);
+    const [engineersData, setEngineersData] = useState<any[]>([]);
+
+    console.log(".////////////////////////////////////", partsData)
+
+    useEffect(() => {
+        if (serviceSalePersons && serviceSalePersons.length > 0) {
+            // Get maintenanceId from route params
+            const { maintenanceId } = route.params || {};
+
+            console.log("Maintenance ID from params:", maintenanceId);
+
+            // Prepare engineers data for tabs
+            const engineers = serviceSalePersons.map((person: any) => ({
+                id: person.id.toString(),
+                name: person.name,
+                wallet: person.wallet || []
+            }));
+
+            setEngineersData(engineers);
+
+            // Prepare all parts data - FILTERED by maintenanceId
+            const allParts: any[] = [];
+
+            serviceSalePersons.forEach((person: any) => {
+                if (person.wallet && person.wallet.length > 0) {
+                    person.wallet.forEach((item: any, index: number) => {
+                        // Only include parts that match the maintenanceId
+                        if (item.maintenance_id === maintenanceId) {
+                            allParts.push({
+                                id: item.id?.toString() || `${person.id}-${index}`,
+                                partNo: item.part_no || "N/A",
+                                requestedBy: person.name,
+                                engineerId: person.id.toString(),
+                                date: item.requested_date ?
+                                    new Date(item.requested_date).toLocaleDateString('en-GB').split('/').join('-') : "N/A",
+                                status: item.is_approved ? "approved" : "requested",
+                                quantity: item.approve_quantity || item.requested_quantity || 1,
+                                originalData: item,
+                                isSelected: false
+                            });
+                        }
+                    });
+                }
+            });
+
+            console.log("Filtered parts for maintenance ID:", maintenanceId, allParts);
+            setPartsData(allParts);
+        }
+    }, [serviceSalePersons, route.params]);
+
+    // Filter parts based on active tab and status filter
+    const filteredParts = partsData.filter(part => {
+        // Engineer filter
+        const engineerMatch = activeTab === "all" || part.engineerId === activeTab;
+
+        // Status filter
+        const statusMatch = statusFilter === "all" || part.status === statusFilter;
+
+        // Search filter
+        const searchMatch = part.partNo.toLowerCase().includes(searchText.toLowerCase());
+
+        return engineerMatch && statusMatch && searchMatch;
+    });
+
+    const handleRequestPart = () => {
+        if (partNumber && quantity) {
+            const newPart = {
+                id: (partsData.length + 1).toString(),
+                partNo: partNumber,
+                requestedBy: "Engineer",
+                date: new Date().toLocaleDateString('en-GB').split('/').join('-'),
+                status: "requested",
+                quantity: parseInt(quantity) || 1,
+                isSelected: false
+            };
+
+            setPartsData([...partsData, newPart]);
+            setShowAddForm(false);
+            setPartNumber("");
+            setQuantity("");
+        }
+    };
+
+    const togglePartSelection = (item: any) => {
+        // Only allow selection of requested parts (not approved ones)
+        if (item.status === "approved") {
+            return;
+        }
+
+        const updatedParts = partsData.map(part =>
+            part.id === item.id ? { ...part, isSelected: !part.isSelected } : part
+        );
+
+        setPartsData(updatedParts);
+
+        // Update selected parts - only include requested parts
+        const selected = updatedParts.filter(part => part.isSelected && part.status === "requested");
+        setSelectedParts(selected);
+
+        // Initialize quantity values for selected parts
+        const newQuantities = { ...approveQuantities };
+        if (!item.isSelected) {
+            newQuantities[item.id] = item.quantity.toString();
+        } else {
+            delete newQuantities[item.id];
+        }
+        setApproveQuantities(newQuantities);
+    };
+
+    const handleApproveParts = async () => {
+        try {
+            const approvalPayload = selectedParts.map(part => ({
+                id: parseInt(part.originalData.id),
+                maintenance_id: part.originalData.maintenance_id,
+                approved_quantity: parseInt(approveQuantities[part.id] || part.quantity),
+                is_approved: true
+            }));
+
+            const response = await maintenanceApi.approvePartsRequest(approvalPayload);
+
+            if (response.msg === "successful") {
+                // Update local state
+                const updatedParts = partsData.map(part => {
+                    if (part.isSelected) {
+                        return {
+                            ...part,
+                            status: "approved",
+                            quantity: parseInt(approveQuantities[part.id] || part.quantity),
+                            isSelected: false
+                        };
+                    }
+                    return part;
+                });
+
+                setPartsData(updatedParts);
+                setSelectedParts([]);
+                setApproveQuantities({});
+                setShowApproveDrawer(false);
+
+                Alert.alert("Success", "Parts approved successfully");
+            } else {
+                Alert.alert("Error", "Failed to approve parts");
+            }
+        } catch (error) {
+            console.error("Approve parts error:", error);
+            Alert.alert("Error", "Failed to approve parts");
+        }
+    };
+
+    const handleQuantityChange = (partId: string, value: string) => {
+        // Only allow numbers and empty string
+        if (value === '' || /^\d+$/.test(value)) {
+            const part = partsData.find(p => p.id === partId);
+            const requestedQty = part?.quantity || 0;
+            const numericValue = parseInt(value) || 0;
+            
+            // Check if the value is within allowed range (1 to requested quantity)
+            if (numericValue >= 1 && numericValue <= requestedQty) {
+                setApproveQuantities({
+                    ...approveQuantities,
+                    [partId]: value
+                });
+            }
+        }
+    };
+
+    const incrementQuantity = (partId: string) => {
+        const part = partsData.find(p => p.id === partId);
+        const requestedQty = part?.quantity || 0;
+        const currentQty = parseInt(approveQuantities[partId] || part?.quantity.toString() || "1");
+        
+        if (currentQty < requestedQty) {
+            setApproveQuantities({
+                ...approveQuantities,
+                [partId]: (currentQty + 1).toString()
+            });
+        }
+    };
+
+    const decrementQuantity = (partId: string) => {
+        const currentQty = parseInt(approveQuantities[partId] || "1");
+        
+        if (currentQty > 1) {
+            setApproveQuantities({
+                ...approveQuantities,
+                [partId]: (currentQty - 1).toString()
+            });
+        }
+    };
+
+    const getStatusButtonStyle = (status: string) => {
+        switch (status) {
+            case "requested":
+                return styles.requestedButton;
+            case "approved":
+                return styles.approvedButton;
+            case "reclosed":
+                return styles.reclosedButton;
+            default:
+                return styles.requestedButton;
+        }
+    };
+
+    const getStatusButtonText = (status: string) => {
+        switch (status) {
+            case "requested":
+                return "Requested";
+            case "approved":
+                return "Approved";
+            case "reclosed":
+                return "Reclosed";
+            default:
+                return "Requested";
+        }
+    };
+
+    const renderPartItem = ({ item }: any) => (
+        <TouchableOpacity onPress={() => togglePartSelection(item)}>
+            <View style={[styles.partItem, item.isSelected && styles.selectedPartItem]}>
+                <View style={styles.checkboxContainer}>
+                    {item.isSelected ? (
+                        <Icon name="checkbox-marked" size={24} color="#00BFA5" />
+                    ) : item.status === "approved" ? (
+                        <Icon name="check-circle" size={24} color="#00BFA5" />
+                    ) : (
+                        <Icon name="checkbox-blank-circle-outline" size={24} color="#9E9E9E" />
+                    )}
+                </View>
+                <View style={styles.partInfo}>
+                    <Text style={styles.partLabel}>Part No.</Text>
+                    <Text style={styles.partNumber}>{item.partNo}</Text>
+                    <Text style={styles.requestedBy}>Requested By: {item.requestedBy}</Text>
+                    <Text style={styles.quantityText}>Qty: {item.quantity}</Text>
+                </View>
+                <View style={styles.statusContainer}>
+                    <TouchableOpacity style={[styles.statusButton, getStatusButtonStyle(item.status)]}>
+                        <Text style={styles.statusButtonText}>{getStatusButtonText(item.status)}</Text>
+                    </TouchableOpacity>
+                </View>
+                <View style={styles.dateContainer}>
+                    <Text style={styles.dateLabel}>Date</Text>
+                    <Text style={styles.date}>{item.date}</Text>
+                </View>
+            </View>
+        </TouchableOpacity>
+    );
+
+    return (
+        <View style={styles.container}>
+            <Header />
+            {/* Custom Header */}
+            <View style={styles.header}>
+                <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={() => navigation.goBack()}
+                >
+                    <Icon name="arrow-left" size={24} color="#1A1D29" />
+                    <Text style={styles.headerTitle}>Parts Details</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={styles.addButtonTop}
+                    onPress={() => navigation.navigate('AddParts', {
+                        maintenanceId: route.params.maintenanceId,
+                        serviceSalePersonId: serviceSalePersons.length > 0 ? serviceSalePersons[0].id : null
+                    })}
+                >
+                    <Icon name="plus" size={16} color="#ffffff" style={styles.plusIcon} />
+                    <Text style={styles.addButtonText}>Add New</Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Search Bar */}
+            <View style={styles.searchContainer}>
+                <TextInput
+                    style={styles.searchInput}
+                    placeholder="Search by part number"
+                    value={searchText}
+                    onChangeText={setSearchText}
+                    placeholderTextColor="#9E9E9E"
+                />
+                <Icon name="magnify" size={20} color="#9E9E9E" />
+            </View>
+
+            {/* Status Filter Buttons */}
+            <View style={styles.statusFilterContainer}>
+                <TouchableOpacity
+                    style={[styles.statusFilterButton, statusFilter === "all" && styles.statusFilterButtonActive]}
+                    onPress={() => setStatusFilter("all")}
+                >
+                    <Text style={[styles.statusFilterText, statusFilter === "all" && styles.statusFilterTextActive]}>
+                        All
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.statusFilterButton, statusFilter === "requested" && styles.statusFilterButtonActive]}
+                    onPress={() => setStatusFilter("requested")}
+                >
+                    <Text style={[styles.statusFilterText, statusFilter === "requested" && styles.statusFilterTextActive]}>
+                        Requested
+                    </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={[styles.statusFilterButton, statusFilter === "approved" && styles.statusFilterButtonActive]}
+                    onPress={() => setStatusFilter("approved")}
+                >
+                    <Text style={[styles.statusFilterText, statusFilter === "approved" && styles.statusFilterTextActive]}>
+                        Approved
+                    </Text>
+                </TouchableOpacity>
+            </View>
+
+            {/* Parts List */}
+            <FlatList
+                data={filteredParts}
+                renderItem={renderPartItem}
+                keyExtractor={item => item.id}
+                contentContainerStyle={styles.listContainer}
+                ListEmptyComponent={
+                    <View style={styles.emptyContainer}>
+                        <Text style={styles.emptyText}>No parts found</Text>
+                    </View>
+                }
+            />
+
+            {/* Approve Button (shown when REQUESTED parts are selected) */}
+            {selectedParts.length > 0 && (
+                <TouchableOpacity
+                    style={styles.approveFloatingButton}
+                    onPress={() => setShowApproveDrawer(true)}
+                >
+                    <Text style={styles.approveFloatingButtonText}>
+                        Approve ({selectedParts.length})
+                    </Text>
+                </TouchableOpacity>
+            )}
+
+            {/* Add New Form Drawer */}
+            <Modal
+                visible={showAddForm}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setShowAddForm(false)}
+            >
+                <View style={styles.drawerOverlay}>
+                    <View style={styles.drawerContent}>
+                        <View style={styles.drawerHandle} />
+                        <View style={styles.drawerHeader}>
+                            <Text style={styles.drawerTitle}>Assign new part</Text>
+                            <TouchableOpacity onPress={() => setShowAddForm(false)}>
+                                <Icon name="close" size={24} color="#1A1D29" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.drawerBody}>
+                            <View style={styles.formContainer}>
+                                <Text style={styles.formLabel}>Enter Part Number</Text>
+                                <TextInput
+                                    style={styles.formInput}
+                                    placeholder="Search by part Number"
+                                    value={partNumber}
+                                    onChangeText={setPartNumber}
+                                />
+
+                                <Text style={styles.formLabel}>Quantity</Text>
+                                <TextInput
+                                    style={styles.formInput}
+                                    placeholder="Enter Quantity"
+                                    value={quantity}
+                                    onChangeText={setQuantity}
+                                    keyboardType="numeric"
+                                />
+
+                                <View style={styles.formButtons}>
+                                    <TouchableOpacity
+                                        style={styles.cancelButton}
+                                        onPress={() => setShowAddForm(false)}
+                                    >
+                                        <Text style={styles.cancelButtonText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={styles.requestButton}
+                                        onPress={handleRequestPart}
+                                    >
+                                        <Text style={styles.requestButtonText}>Request Part</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+                        </ScrollView>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* Approve Parts Drawer */}
+            <Modal
+                visible={showApproveDrawer}
+                animationType="slide"
+                transparent={true}
+                onRequestClose={() => setShowApproveDrawer(false)}
+            >
+                <View style={styles.drawerOverlay}>
+                    <View style={styles.drawerContent}>
+                        <View style={styles.drawerHandle} />
+                        <View style={styles.drawerHeader}>
+                            <Text style={styles.drawerTitle}>Approve Parts</Text>
+                            <TouchableOpacity onPress={() => setShowApproveDrawer(false)}>
+                                <Icon name="close" size={24} color="#1A1D29" />
+                            </TouchableOpacity>
+                        </View>
+
+                        <ScrollView style={styles.drawerBody}>
+                            {selectedParts.map((part) => (
+                                <View key={part.id} style={styles.approveItem}>
+                                    <View style={styles.approveItemHeader}>
+                                        <Text style={styles.approvePartNumber}>{part.partNo}</Text>
+                                        <Text style={styles.approveRequestedBy}>By: {part.requestedBy}</Text>
+                                    </View>
+
+                                    <View style={styles.approveItemDetails}>
+                                        <View style={styles.quantitySection}>
+                                            <Text style={styles.quantityLabel}>Requested Quantity: {part.quantity}</Text>
+                                            
+                                            <View style={styles.quantityControlContainer}>
+                                                <Text style={styles.approveQuantityLabel}>Approve Quantity:</Text>
+                                                
+                                                <View style={styles.quantityInputWrapper}>
+                                                    <TouchableOpacity 
+                                                        style={styles.quantityButton}
+                                                        onPress={() => decrementQuantity(part.id)}
+                                                    >
+                                                        <Icon name="minus" size={16} color="#1A1D29" />
+                                                    </TouchableOpacity>
+                                                    
+                                                    <TextInput
+                                                        style={styles.quantityInput}
+                                                        value={approveQuantities[part.id] || part.quantity.toString()}
+                                                        onChangeText={(value) => handleQuantityChange(part.id, value)}
+                                                        keyboardType="numeric"
+                                                        textAlign="center"
+                                                    />
+                                                    
+                                                    <TouchableOpacity 
+                                                        style={styles.quantityButton}
+                                                        onPress={() => incrementQuantity(part.id)}
+                                                    >
+                                                        <Icon name="plus" size={16} color="#1A1D29" />
+                                                    </TouchableOpacity>
+                                                </View>
+                                            </View>
+                                        </View>
+
+                                        <View style={styles.stockInfo}>
+                                            <Text style={styles.stockLabel}>In Stock:</Text>
+                                            <Text style={styles.stockValue}>
+                                                {part.originalData?.in_stock_quantity || "0"}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            ))}
+                        </ScrollView>
+
+                        <View style={styles.drawerFooter}>
+                            <TouchableOpacity
+                                style={styles.cancelButton}
+                                onPress={() => setShowApproveDrawer(false)}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.requestButton}
+                                onPress={handleApproveParts}
+                            >
+                                <Text style={styles.requestButtonText}>Approve Selected</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+        </View>
+    );
+};
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        backgroundColor: "#F5F7FA",
+    },
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 16,
+    },
+    backButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    headerTitle: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: "#1A1D29",
+        marginLeft: 8,
+    },
+    addButtonTop: {
+        backgroundColor: "#00BFA5",
+        borderRadius: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    plusIcon: {
+        marginRight: 4,
+    },
+    addButtonText: {
+        color: "#ffffff",
+        fontSize: 14,
+        fontWeight: "600",
+    },
+    searchContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: "#E5E9F2",
+        borderRadius: 8,
+        marginHorizontal: 16,
+        marginBottom: 16,
+        paddingHorizontal: 12,
+        backgroundColor: "#FFFFFF",
+    },
+    searchInput: {
+        flex: 1,
+        fontSize: 14,
+        paddingVertical: 10,
+        paddingRight: 10,
+        color: "#1A1D29",
+    },
+    listContainer: {
+        padding: 16,
+        paddingBottom: 80, // Extra padding for floating button
+    },
+    partItem: {
+        flexDirection: "row",
+        alignItems: "center",
+        backgroundColor: "#FFFFFF",
+        borderRadius: 12,
+        padding: 16,
+        marginBottom: 12,
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    selectedPartItem: {
+        backgroundColor: "#E8F5E9",
+        borderWidth: 1,
+        borderColor: "#00BFA5",
+    },
+    checkboxContainer: {
+        marginRight: 12,
+    },
+    partInfo: {
+        flex: 1,
+    },
+    partLabel: {
+        fontSize: 12,
+        color: "#6B7280",
+        marginBottom: 2,
+    },
+    partNumber: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: "#1A1D29",
+        marginBottom: 4,
+    },
+    requestedBy: {
+        fontSize: 12,
+        color: "#6B7280",
+        marginBottom: 2,
+    },
+    quantityText: {
+        fontSize: 12,
+        color: "#6B7280",
+    },
+    statusContainer: {
+        marginHorizontal: 12,
+    },
+    statusButton: {
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        borderRadius: 12,
+    },
+    statusButtonText: {
+        fontSize: 12,
+        fontWeight: "600",
+    },
+    requestedButton: {
+        backgroundColor: "#FFECB3",
+    },
+    approvedButton: {
+        backgroundColor: "#C8E6C9",
+    },
+    reclosedButton: {
+        backgroundColor: "#FFCDD2",
+    },
+    dateContainer: {
+        alignItems: "flex-end",
+    },
+    dateLabel: {
+        fontSize: 12,
+        color: "#6B7280",
+        marginBottom: 2,
+    },
+    date: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: "#1A1D29",
+    },
+    emptyContainer: {
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 40,
+    },
+    emptyText: {
+        fontSize: 16,
+        color: "#9E9E9E",
+    },
+    approveFloatingButton: {
+        position: "absolute",
+        bottom: 20,
+        left: 16,
+        right: 16,
+        backgroundColor: "#00BFA5",
+        borderRadius: 8,
+        paddingVertical: 16,
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    approveFloatingButtonText: {
+        color: "#FFFFFF",
+        fontSize: 16,
+        fontWeight: "600",
+    },
+    drawerOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        justifyContent: "flex-end",
+    },
+    drawerContent: {
+        backgroundColor: "#FFFFFF",
+        borderTopLeftRadius: 16,
+        borderTopRightRadius: 16,
+        maxHeight: "80%",
+    },
+    drawerHandle: {
+        width: 40,
+        height: 4,
+        backgroundColor: "#E5E9F2",
+        borderRadius: 2,
+        alignSelf: "center",
+        marginTop: 12,
+        marginBottom: 8,
+    },
+    drawerHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: "#E5E9F2",
+    },
+    drawerTitle: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#1A1D29",
+    },
+    drawerBody: {
+        padding: 16,
+    },
+    drawerFooter: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        padding: 16,
+        borderTopWidth: 1,
+        borderTopColor: "#E5E9F2",
+    },
+    formContainer: {
+        marginBottom: 20,
+    },
+    formLabel: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: "#1A1D29",
+        marginBottom: 8,
+    },
+    formInput: {
+        borderWidth: 1,
+        borderColor: "#E5E9F2",
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 16,
+        fontSize: 14,
+        color: "#1A1D29",
+    },
+    formButtons: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        marginTop: 8,
+    },
+    cancelButton: {
+        flex: 1,
+        borderWidth: 1,
+        borderColor: "#E5E9F2",
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: "center",
+        marginRight: 8,
+    },
+    cancelButtonText: {
+        color: "#6B7280",
+        fontSize: 14,
+        fontWeight: "600",
+    },
+    requestButton: {
+        flex: 1,
+        backgroundColor: "#00BFA5",
+        borderRadius: 8,
+        paddingVertical: 12,
+        alignItems: "center",
+        marginLeft: 8,
+    },
+    requestButtonText: {
+        color: "#FFFFFF",
+        fontSize: 14,
+        fontWeight: "600",
+    },
+    statusFilterContainer: {
+        flexDirection: "row",
+        justifyContent: "center",
+        alignItems: "center",
+        paddingHorizontal: 16,
+        marginBottom: 16,
+    },
+    statusFilterButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        backgroundColor: "#FFFFFF",
+        borderWidth: 1,
+        borderColor: "#E5E9F2",
+        marginHorizontal: 4,
+    },
+    statusFilterButtonActive: {
+        backgroundColor: "#00BFA5",
+        borderColor: "#00BFA5",
+    },
+    statusFilterText: {
+        fontSize: 14,
+        color: "#6B7280",
+    },
+    statusFilterTextActive: {
+        color: "#FFFFFF",
+    },
+    approveItem: {
+        backgroundColor: "#F9F9F9",
+        borderRadius: 8,
+        padding: 16,
+        marginBottom: 12,
+    },
+    approveItemHeader: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginBottom: 12,
+    },
+    approvePartNumber: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#1A1D29",
+    },
+    approveRequestedBy: {
+        fontSize: 12,
+        color: "#6B7280",
+    },
+    approveItemDetails: {
+        flexDirection: "column",
+    },
+    quantitySection: {
+        marginBottom: 12,
+    },
+    quantityLabel: {
+        fontSize: 14,
+        color: "#6B7280",
+        marginBottom: 8,
+    },
+    approveQuantityLabel: {
+        fontSize: 14,
+        color: "#6B7280",
+        marginBottom: 8,
+    },
+    quantityControlContainer: {
+        flexDirection: "column",
+    },
+    quantityInputWrapper: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 8,
+    },
+    quantityButton: {
+        width: 32,
+        height: 32,
+        borderRadius: 4,
+        backgroundColor: "#E5E9F2",
+        alignItems: "center",
+        justifyContent: "center",
+    },
+    quantityInput: {
+        borderWidth: 1,
+        borderColor: "#E5E9F2",
+        borderRadius: 4,
+        padding: 8,
+        width: 80,
+        textAlign: "center",
+        backgroundColor: "#FFFFFF",
+        fontSize: 14,
+        color: "#1A1D29",
+        marginHorizontal: 8,
+    },
+    stockInfo: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    stockLabel: {
+        fontSize: 14,
+        color: "#6B7280",
+        marginRight: 4,
+    },
+    stockValue: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: "#1A1D29",
+    },
+});
+
+export default PartsDetails;
