@@ -14,27 +14,23 @@ import {
 } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import Icon from 'react-native-vector-icons/Ionicons';
-import { useSelector } from 'react-redux';
-import { RootState } from '../Redux/store'; 
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState } from '../Redux/store';
+import { logout } from '../Redux/Slices/authSlice';
 
 const ChangePassword = () => {
-    const [oldPassword, setOldPassword] = useState('Maco@2025');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
-    const [showOldPassword, setShowOldPassword] = useState(false);
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
     const { changePassword, loading } = useAuth();
     const { email } = useSelector((state: RootState) => state.auth);
+    const dispatch = useDispatch();
 
     const validate = () => {
         const newErrors: { [key: string]: string } = {};
-
-        if (!oldPassword.trim()) {
-            newErrors.oldPassword = 'Current password is required';
-        }
 
         if (!newPassword.trim()) {
             newErrors.newPassword = 'New password is required';
@@ -55,53 +51,51 @@ const ChangePassword = () => {
 
         const result = await changePassword({
             email: email || '',
-            old_password: oldPassword,
-            new_password: newPassword,
+            password: newPassword, 
         });
 
         if (result.success) {
-            // Navigation will be handled automatically by Routes component
-            // based on the updated auth state (isPasswordChanged and permissions)
             console.log('Password changed successfully, navigation will be handled automatically');
         }
+    };
+
+    const handleBackToLogin = () => {
+        dispatch(logout());
     };
 
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar backgroundColor="#ffffff" barStyle="dark-content" />
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 style={{ flex: 1 }}
             >
-                <ScrollView contentContainerStyle={styles.scroll}>
+                <ScrollView 
+                    contentContainerStyle={styles.scroll}
+                    showsVerticalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    {/* Back Button - Added at the top */}
+                    <TouchableOpacity 
+                        style={styles.backButton}
+                        onPress={handleBackToLogin}
+                    >
+                        <Icon name="arrow-back" size={24} color="#000" />
+                    </TouchableOpacity>
+
                     <View style={styles.container}>
                         <Text style={styles.title}>Change Password</Text>
                         <Text style={styles.subtitle}>
                             Please change your default password to continue
                         </Text>
 
-                        {/* Current Password Input */}
-                        <View style={styles.passwordContainer}>
-                            <TextInput
-                                placeholder="Current Password"
-                                style={[styles.passwordInput, errors.oldPassword && styles.inputError]}
-                                value={oldPassword}
-                                onChangeText={setOldPassword}
-                                secureTextEntry={!showOldPassword}
-                                placeholderTextColor="#999"
-                            />
-                            <TouchableOpacity
-                                style={styles.eyeIcon}
-                                onPress={() => setShowOldPassword(!showOldPassword)}
-                            >
-                                <Icon
-                                    name={showOldPassword ? 'eye' : 'eye-off'}
-                                    size={20}
-                                    color="#999"
-                                />
-                            </TouchableOpacity>
+                        {/* Email Display - Read Only */}
+                        <View style={styles.emailContainer}>
+                            <Text style={styles.emailLabel}>Email</Text>
+                            <View style={styles.emailInput}>
+                                <Text style={styles.emailText}>{email}</Text>
+                            </View>
                         </View>
-                        {errors.oldPassword && <Text style={styles.errorText}>{errors.oldPassword}</Text>}
 
                         {/* New Password Input */}
                         <View style={styles.passwordContainer}>
@@ -178,6 +172,13 @@ const styles = StyleSheet.create({
     container: {
         alignItems: 'center',
     },
+    backButton: {
+        position: 'absolute',
+        top: Platform.OS === 'ios' ? 50 : 20,
+        left: 20,
+        zIndex: 10,
+        padding: 10,
+    },
     title: {
         fontSize: 28,
         fontWeight: '700',
@@ -189,6 +190,29 @@ const styles = StyleSheet.create({
         color: '#666',
         marginBottom: 30,
         textAlign: 'center',
+    },
+    emailContainer: {
+        width: '100%',
+        marginBottom: 20,
+    },
+    emailLabel: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#000',
+        marginBottom: 8,
+        marginLeft: 15,
+    },
+    emailInput: {
+        width: '100%',
+        height: 52,
+        backgroundColor: '#F1F1F1',
+        borderRadius: 25,
+        paddingHorizontal: 20,
+        justifyContent: 'center',
+    },
+    emailText: {
+        fontSize: 16,
+        color: '#000',
     },
     passwordContainer: {
         width: '100%',

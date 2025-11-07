@@ -14,6 +14,7 @@ interface EngineerSectionProps {
     setShowDatePicker: (show: boolean) => void;
     selectedPart: string;
     selectedPriority: string;
+    setSelectedPriority: (priority: string) => void;
     selectedDate: Date;
     setSelectedDate: (date: Date) => void;
     formatDate: (date: Date) => string;
@@ -28,10 +29,8 @@ interface EngineerSectionProps {
 }
 
 const EngineerSection = ({
-    showPriorityOptions,
-    setShowDatePicker,
-    selectedPart,
     selectedPriority,
+    setSelectedPriority,
     selectedDate,
     setSelectedDate,
     formatDate,
@@ -545,9 +544,7 @@ const EngineerSection = ({
                 title="Select Priority"
                 options={priorityOptions}
                 onSelect={(value) => {
-                    // This will set the priority in the parent component
-                    // You might need to pass a setSelectedPriority prop
-                    // For now, I'll assume it's handled by the parent
+                    setSelectedPriority(value);
                     setShowPriorityModal(false);
                 }}
             />

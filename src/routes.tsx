@@ -37,7 +37,7 @@ const AuthNavigator = () => (
   </Stack.Navigator>
 );
 
-// Alternative: Common screens কে manually প্রতিটি navigator এ add করুন
+// Alternative: Common screens
 
 const AppNavigator = () => {
   const { isPasswordChanged, permissions, currentRole } = useSelector((state: RootState) => state.auth);
@@ -108,7 +108,7 @@ const AppNavigator = () => {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       <Stack.Screen name={mainScreenName} component={MainTabsComponent} />
 
-      {/* Common screens manually add করুন */}
+      {/* Common screens manually add */}
       <Stack.Screen name="OpenAssetsDetails" component={OpenAssetsDetails} />
       <Stack.Screen name="WalletScreen" component={WalletScreen} />
       <Stack.Screen name="AcceptAssetDetails" component={AcceptAssetDetails} />

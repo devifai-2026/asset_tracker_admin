@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
-  Image,
   SafeAreaView,
   StatusBar,
   KeyboardAvoidingView,
@@ -24,7 +23,6 @@ import {
   clearCurrentDetail,
   acceptMaintenance,
 } from "../Redux/Slices/maintenanceSlice";
-import { RootState } from "../Redux/store";
 import { Header } from "./Header";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 
@@ -108,22 +106,45 @@ const OpenAssetsDetails = () => {
     }
   };
 
-  // Format datetime for comments
+  // Robust formatDateTime function for GMT time strings
   const formatDateTime = (dateTimeString: string) => {
     if (!dateTimeString) return "N/A";
 
     try {
+      // Parse the GMT date string
       const date = new Date(dateTimeString);
-      if (isNaN(date.getTime())) return "N/A";
+
+      if (isNaN(date.getTime())) {
+        // Fallback: try parsing as is
+        const fallbackDate = new Date(dateTimeString.replace('GMT', ''));
+        if (isNaN(fallbackDate.getTime())) return "N/A";
+
+        const day = fallbackDate.getDate().toString().padStart(2, '0');
+        const month = (fallbackDate.getMonth() + 1).toString().padStart(2, '0');
+        const year = fallbackDate.getFullYear();
+
+        let hours = fallbackDate.getHours();
+        const minutes = fallbackDate.getMinutes().toString().padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+
+        return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
+      }
 
       const day = date.getDate().toString().padStart(2, '0');
       const month = (date.getMonth() + 1).toString().padStart(2, '0');
       const year = date.getFullYear();
-      const hours = date.getHours().toString().padStart(2, '0');
-      const minutes = date.getMinutes().toString().padStart(2, '0');
 
-      return `${day}/${month}/${year} ${hours}:${minutes}`;
+      let hours = date.getHours();
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+
+      return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
     } catch (error) {
+      console.error('Date formatting error:', error);
       return "N/A";
     }
   };
@@ -132,8 +153,8 @@ const OpenAssetsDetails = () => {
     if (!maintenanceDetail?.id) return;
 
     dispatch(acceptMaintenance({
-      is_accepeted: true,
-      comment: comment,
+      is_accepted: true,
+      comment: "Accepted",
       maintenance_id: maintenanceDetail.id
     }) as any)
       .then(() => {
@@ -166,7 +187,7 @@ const OpenAssetsDetails = () => {
     }
 
     setRejectPressed(false);
-    
+
     dispatch(acceptMaintenance({
       is_accepeted: false,
       comment: comment,
@@ -257,8 +278,8 @@ const OpenAssetsDetails = () => {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 20}
       >
-        <ScrollView 
-          style={styles.scrollView} 
+        <ScrollView
+          style={styles.scrollView}
           contentContainerStyle={styles.scrollViewContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -509,7 +530,7 @@ const OpenAssetsDetails = () => {
                 <TouchableOpacity style={styles.acceptBtn} onPress={handleAccept}>
                   <Text style={styles.btnText}>Accept</Text>
                 </TouchableOpacity>
-                
+
                 {!showCommentBox ? (
                   <TouchableOpacity style={styles.rejectBtn} onPress={handleRejectClick}>
                     <Text style={styles.btnText}>Reject</Text>
@@ -551,11 +572,11 @@ const OpenAssetsDetails = () => {
                   )}
 
                   {/* Confirm Reject Button */}
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={[
                       styles.confirmRejectBtn,
                       !comment.trim() && styles.confirmRejectBtnDisabled
-                    ]} 
+                    ]}
                     onPress={handleRejectConfirm}
                     disabled={!comment.trim()}
                   >

@@ -14,6 +14,8 @@ import {
   KeyboardAvoidingView,
   SafeAreaView,
   StatusBar,
+  Modal,
+  Dimensions,
 } from "react-native";
 import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useDispatch, useSelector } from "react-redux";
@@ -31,6 +33,8 @@ import ClosureRequestModal from "./ClosureRequestModal";
 import { Header } from "./Header";
 import { authClient } from "../services/api.clients";
 import { APIEndpoints } from "../services/api.endpoints";
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 const AcceptAssetDetails = () => {
   const route = useRoute();
@@ -52,15 +56,10 @@ const AcceptAssetDetails = () => {
   const [visitDate, setVisitDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
-  // useEffect(() => {
-  //   if (ticket?.id) {
-  //     dispatch(fetchMaintenanceDetail(ticket.id) as any);
-  //   }
-
-  //   return () => {
-  //     dispatch(clearCurrentDetail());
-  //   };
-  // }, [ticket?.id, dispatch]);
+  // Full screen image modal states
+  const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+  const [showImageModal, setShowImageModal] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const fetchData = useCallback(() => {
     if (ticket?.id) {
@@ -143,25 +142,48 @@ const AcceptAssetDetails = () => {
   };
 
   // Format datetime for comments
+  // Robust formatDateTime function for GMT time strings
   const formatDateTime = (dateTimeString: string) => {
     if (!dateTimeString) return "N/A";
 
     try {
+      // Parse the GMT date string
       const date = new Date(dateTimeString);
-      if (isNaN(date.getTime())) return "N/A";
+
+      if (isNaN(date.getTime())) {
+        // Fallback: try parsing as is
+        const fallbackDate = new Date(dateTimeString.replace('GMT', ''));
+        if (isNaN(fallbackDate.getTime())) return "N/A";
+
+        const day = fallbackDate.getDate().toString().padStart(2, '0');
+        const month = (fallbackDate.getMonth() + 1).toString().padStart(2, '0');
+        const year = fallbackDate.getFullYear();
+
+        let hours = fallbackDate.getHours();
+        const minutes = fallbackDate.getMinutes().toString().padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        hours = hours % 12;
+        hours = hours ? hours : 12;
+
+        return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
+      }
 
       const day = date.getDate().toString().padStart(2, '0');
       const month = (date.getMonth() + 1).toString().padStart(2, '0');
       const year = date.getFullYear();
-      const hours = date.getHours().toString().padStart(2, '0');
-      const minutes = date.getMinutes().toString().padStart(2, '0');
 
-      return `${day}/${month}/${year} ${hours}:${minutes}`;
+      let hours = date.getHours();
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+
+      return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
     } catch (error) {
+      console.error('Date formatting error:', error);
       return "N/A";
     }
   };
-
   const handleRequestClosure = () => {
     setShowClosureModal(true);
   };
@@ -176,6 +198,34 @@ const AcceptAssetDetails = () => {
       });
     } else {
       Alert.alert("Error", "Maintenance ID not found");
+    }
+  };
+
+  // Full Screen Image Handlers
+  const handleImagePress = (imageUri: string, index: number) => {
+    setSelectedImageUri(`https://${imageUri}`);
+    setCurrentImageIndex(index);
+    setShowImageModal(true);
+  };
+
+  const handleCloseImageModal = () => {
+    setShowImageModal(false);
+    setSelectedImageUri(null);
+  };
+
+  const handleNextImage = () => {
+    if (maintenanceDetail?.photos && maintenanceDetail.photos.length > 0) {
+      const nextIndex = (currentImageIndex + 1) % maintenanceDetail.photos.length;
+      setCurrentImageIndex(nextIndex);
+      setSelectedImageUri(`https://${maintenanceDetail.photos[nextIndex].image_uri}`);
+    }
+  };
+
+  const handlePrevImage = () => {
+    if (maintenanceDetail?.photos && maintenanceDetail.photos.length > 0) {
+      const prevIndex = (currentImageIndex - 1 + maintenanceDetail.photos.length) % maintenanceDetail.photos.length;
+      setCurrentImageIndex(prevIndex);
+      setSelectedImageUri(`https://${maintenanceDetail.photos[prevIndex].image_uri}`);
     }
   };
 
@@ -412,24 +462,6 @@ const AcceptAssetDetails = () => {
     return new Date();
   };
 
-  // Function to handle image press for full screen view
-  const handleImagePress = (imageUri: string) => {
-    // You can implement a modal or navigation to full screen image view here
-    Alert.alert("Image", "Would you like to view this image in full screen?", [
-      {
-        text: "Cancel",
-        style: "cancel"
-      },
-      {
-        text: "View",
-        onPress: () => {
-          // Navigate to full screen image view or show modal
-          console.log("View image:", imageUri);
-        }
-      }
-    ]);
-  };
-
   if (loading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -616,7 +648,8 @@ const AcceptAssetDetails = () => {
                       <TouchableOpacity
                         key={photo.id || index}
                         style={styles.attachmentItem}
-                        onPress={() => handleImagePress(photo.image_uri)}
+                        onPress={() => handleImagePress(photo.image_uri, index)}
+                        activeOpacity={0.7}
                       >
                         <Image
                           source={{ uri: `https://${photo.image_uri}` }}
@@ -798,6 +831,62 @@ const AcceptAssetDetails = () => {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Full Screen Image Modal */}
+      <Modal
+        visible={showImageModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleCloseImageModal}
+        statusBarTranslucent={true}
+      >
+        <View style={styles.fullScreenModal}>
+          {/* Close Button */}
+          <TouchableOpacity
+            style={styles.modalCloseButton}
+            onPress={handleCloseImageModal}
+          >
+            <Icon name="close" size={30} color="#fff" />
+          </TouchableOpacity>
+
+          {/* Navigation Arrows for multiple images */}
+          {photos.length > 1 && (
+            <>
+              <TouchableOpacity
+                style={[styles.navButton, styles.prevButton]}
+                onPress={handlePrevImage}
+              >
+                <Icon name="chevron-left" size={30} color="#fff" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.navButton, styles.nextButton]}
+                onPress={handleNextImage}
+              >
+                <Icon name="chevron-right" size={30} color="#fff" />
+              </TouchableOpacity>
+            </>
+          )}
+
+          {/* Image */}
+          {selectedImageUri && (
+            <Image
+              source={{ uri: selectedImageUri }}
+              style={styles.fullScreenImage}
+              resizeMode="contain"
+            />
+          )}
+
+          {/* Image Counter */}
+          {photos.length > 1 && (
+            <View style={styles.imageCounter}>
+              <Text style={styles.imageCounterText}>
+                {currentImageIndex + 1} / {photos.length}
+              </Text>
+            </View>
+          )}
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -843,14 +932,9 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
   },
   closureRequestedContainer: {
-    // backgroundColor: "#f8f9fa",
     padding: 15,
     marginHorizontal: 16,
     marginVertical: 10,
-    // borderRadius: 8,
-    // alignItems: "center",
-    // borderWidth: 1,
-    // borderColor: "#0FA37F",
     flexDirection: "row",
     justifyContent: "center",
   },
@@ -972,7 +1056,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'center',
     alignItems: 'center',
-    opacity: 0,
   },
   noAttachmentsText: {
     textAlign: "center",
@@ -1186,6 +1269,59 @@ const styles = StyleSheet.create({
     padding: 10,
     backgroundColor: "#f8f9fa",
     borderRadius: 8,
+  },
+  // Full Screen Image Modal Styles
+  fullScreenModal: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 60 : 40,
+    right: 20,
+    zIndex: 1000,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  fullScreenImage: {
+    width: screenWidth,
+    height: screenHeight,
+  },
+  navButton: {
+    position: 'absolute',
+    top: '50%',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 25,
+    width: 50,
+    height: 50,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  prevButton: {
+    left: 20,
+  },
+  nextButton: {
+    right: 20,
+  },
+  imageCounter: {
+    position: 'absolute',
+    bottom: 40,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+  },
+  imageCounterText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

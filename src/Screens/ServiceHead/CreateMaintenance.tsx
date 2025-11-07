@@ -42,6 +42,7 @@ export const CreateMaintenance = () => {
     const [creating, setCreating] = useState(false);
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [ticketNo, setTicketNo] = useState("");
+    const [showBreakdownTypeModal, setShowBreakdownTypeModal] = useState(false);
 
     useEffect(() => {
         fetchAssets();
@@ -351,6 +352,11 @@ export const CreateMaintenance = () => {
         setSearchQuery(""); // Reset search query when modal opens
     };
 
+    const selectBreakdownType = (type: string) => {
+        setBreakdownType(type);
+        setShowBreakdownTypeModal(false);
+    };
+
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar backgroundColor="#ffffff" barStyle="dark-content" />
@@ -426,32 +432,7 @@ export const CreateMaintenance = () => {
                             <Text style={styles.inputLabel}>breakdown type</Text>
                             <TouchableOpacity
                                 style={styles.selectInput}
-                                onPress={() => {
-                                    Alert.alert(
-                                        "Select Breakdown Type",
-                                        "Choose an option",
-                                        [
-                                            {
-                                                text: "Major",
-                                                onPress: () => setBreakdownType("major"),
-                                            },
-                                            {
-                                                text: "Minor",
-                                                onPress: () => setBreakdownType("minor"),
-                                            },
-                                            {
-                                                text: "Others",
-                                                onPress: () => setBreakdownType("others"),
-                                            },
-                                            {
-                                                text: "Cancel",
-                                                onPress: () => console.log("Cancel Pressed"),
-                                                style: "cancel",
-                                            },
-                                        ],
-                                        { cancelable: true }
-                                    );
-                                }}
+                                onPress={() => setShowBreakdownTypeModal(true)}
                             >
                                 <Text style={breakdownType ? styles.selectText : styles.placeholderText}>
                                     {breakdownType ? breakdownType.charAt(0).toUpperCase() + breakdownType.slice(1) : "select type"}
@@ -580,6 +561,83 @@ export const CreateMaintenance = () => {
                                             ))
                                         )}
                                     </ScrollView>
+                                </View>
+                            </View>
+                        </SafeAreaView>
+                    </Modal>
+
+                    {/* Breakdown Type Modal */}
+                    <Modal
+                        visible={showBreakdownTypeModal}
+                        transparent={true}
+                        animationType="fade"
+                        onRequestClose={() => setShowBreakdownTypeModal(false)}
+                    >
+                        <SafeAreaView style={styles.modalSafeArea}>
+                            <View style={styles.modalOverlay}>
+                                <View style={styles.breakdownTypeModalContent}>
+                                    <View style={styles.modalHeader}>
+                                        <Text style={styles.modalTitle}>Select Breakdown Type</Text>
+                                        <TouchableOpacity onPress={() => setShowBreakdownTypeModal(false)}>
+                                            <Icon name="close" size={24} color="#000" />
+                                        </TouchableOpacity>
+                                    </View>
+
+                                    <View style={styles.breakdownTypeList}>
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.breakdownTypeItem,
+                                                breakdownType === 'major' && styles.selectedBreakdownTypeItem
+                                            ]}
+                                            onPress={() => selectBreakdownType('major')}
+                                        >
+                                            <Text style={[
+                                                styles.breakdownTypeText,
+                                                breakdownType === 'major' && styles.selectedBreakdownTypeText
+                                            ]}>
+                                                Major
+                                            </Text>
+                                            {breakdownType === 'major' && (
+                                                <Icon name="check" size={20} color="#0FA37F" />
+                                            )}
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.breakdownTypeItem,
+                                                breakdownType === 'minor' && styles.selectedBreakdownTypeItem
+                                            ]}
+                                            onPress={() => selectBreakdownType('minor')}
+                                        >
+                                            <Text style={[
+                                                styles.breakdownTypeText,
+                                                breakdownType === 'minor' && styles.selectedBreakdownTypeText
+                                            ]}>
+                                                Minor
+                                            </Text>
+                                            {breakdownType === 'minor' && (
+                                                <Icon name="check" size={20} color="#0FA37F" />
+                                            )}
+                                        </TouchableOpacity>
+
+                                        <TouchableOpacity
+                                            style={[
+                                                styles.breakdownTypeItem,
+                                                breakdownType === 'others' && styles.selectedBreakdownTypeItem
+                                            ]}
+                                            onPress={() => selectBreakdownType('others')}
+                                        >
+                                            <Text style={[
+                                                styles.breakdownTypeText,
+                                                breakdownType === 'others' && styles.selectedBreakdownTypeText
+                                            ]}>
+                                                Others
+                                            </Text>
+                                            {breakdownType === 'others' && (
+                                                <Icon name="check" size={20} color="#0FA37F" />
+                                            )}
+                                        </TouchableOpacity>
+                                    </View>
                                 </View>
                             </View>
                         </SafeAreaView>
@@ -796,6 +854,13 @@ const styles = StyleSheet.create({
         maxHeight: "80%",
         overflow: "hidden",
     },
+    breakdownTypeModalContent: {
+        backgroundColor: "#fff",
+        borderRadius: 12,
+        width: "80%",
+        maxHeight: "40%",
+        overflow: "hidden",
+    },
     modalHeader: {
         flexDirection: "row",
         justifyContent: "space-between",
@@ -845,6 +910,31 @@ const styles = StyleSheet.create({
     assetItemText: {
         fontSize: 16,
         color: "#000",
+    },
+    // Breakdown Type Modal styles
+    breakdownTypeList: {
+        padding: 16,
+    },
+    breakdownTypeItem: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        paddingVertical: 16,
+        paddingHorizontal: 12,
+        borderBottomWidth: 1,
+        borderBottomColor: "#eee",
+    },
+    selectedBreakdownTypeItem: {
+        backgroundColor: "#f0f9f6",
+        borderRadius: 8,
+    },
+    breakdownTypeText: {
+        fontSize: 16,
+        color: "#000",
+    },
+    selectedBreakdownTypeText: {
+        color: "#0FA37F",
+        fontWeight: "500",
     },
     loader: {
         padding: 20,

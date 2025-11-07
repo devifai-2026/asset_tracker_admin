@@ -18,6 +18,8 @@ interface MaintenanceDetailsSectionProps {
 }
 
 const MaintenanceDetailsSection = ({ maintenance }: MaintenanceDetailsSectionProps) => {
+
+    console.log("Maintenance Details::::::::::::::::::::::::::::", maintenance);
     return (
         <View style={styles.section}>
             <Text style={styles.sectionTitle}>Maintenance Details</Text>
@@ -59,7 +61,11 @@ const MaintenanceDetailsSection = ({ maintenance }: MaintenanceDetailsSectionPro
                     <View style={styles.maintenanceItem}>
                         <Text style={styles.maintenanceLabel}>Status</Text>
                         <View style={styles.statusTag}>
-                            <Text style={styles.statusText}>{maintenance.status}</Text>
+                            <Text style={styles.statusText}>
+                                {maintenance.status === 'open' ? 'Open' :
+                                    maintenance.status === 'in_progress' ? 'In Progress' :
+                                        maintenance.status === 'closed' ? 'Closed' : maintenance.status}
+                            </Text>
                         </View>
                     </View>
                     <View style={styles.maintenanceItem}>

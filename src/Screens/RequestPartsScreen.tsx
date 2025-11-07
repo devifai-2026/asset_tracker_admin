@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
     View,
     Text,
@@ -16,19 +16,21 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useDispatch, useSelector } from "react-redux";
 import {
-    fetchInventoryParts,
+    searchParts,
     requestParts,
     entryPartToApprove,
     clearPartsError,
-    selectInventoryError,
-    selectInventoryLoading,
-    selectInventoryParts,
+    selectSearchedParts,
+    selectSearchLoading,
+    selectSearchError,
     selectRequestError,
     selectRequestLoading,
     selectLocalPurchaseLoading,
-    selectLocalPurchaseError
+    selectLocalPurchaseError,
+    clearSearchedParts
 } from "../Redux/Slices/partsSlice";
 import { Header } from "./Header";
+import debounce from 'lodash/debounce';
 
 interface PartRequest {
     part_id: number | number[];
@@ -56,14 +58,12 @@ interface InventoryPart {
     quantity?: number;
 }
 
-const ITEMS_PER_PAGE = 20;
-const SEARCH_DELAY_MS = 300;
+const SEARCH_DELAY_MS = 500;
 
 interface RouteParams {
     maintenanceId?: string;
     onGoBack?: () => void;
 }
-
 
 const RequestPartsScreen = () => {
     const navigation = useNavigation();
@@ -72,17 +72,15 @@ const RequestPartsScreen = () => {
 
     const { maintenanceId: routeMaintenanceId, onGoBack }: RouteParams = route.params || {};
 
-    const inventoryParts = useSelector(selectInventoryParts);
-    const loading = useSelector(selectInventoryLoading);
-    const error = useSelector(selectInventoryError);
+    const searchedParts = useSelector(selectSearchedParts);
+    const searchLoading = useSelector(selectSearchLoading);
+    const searchError = useSelector(selectSearchError);
     const requestLoading = useSelector(selectRequestLoading);
     const requestError = useSelector(selectRequestError);
     const localPurchaseLoading = useSelector(selectLocalPurchaseLoading);
     const localPurchaseError = useSelector(selectLocalPurchaseError);
 
     const [searchQuery, setSearchQuery] = useState("");
-    const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
-    const [currentPage, setCurrentPage] = useState(1);
     const [selectedParts, setSelectedParts] = useState<{ [key: number]: PartRequest }>({});
     const [showLocalPurchaseModal, setShowLocalPurchaseModal] = useState(false);
     const [localPurchaseItems, setLocalPurchaseItems] = useState<LocalPurchaseItem[]>([
@@ -96,13 +94,27 @@ const RequestPartsScreen = () => {
         }
     ]);
 
+    // Debounced search function
+    const debouncedSearch = useRef(
+        debounce((query: string) => {
+            if (query.trim().length > 0) {
+                dispatch(searchParts(query) as any);
+            } else {
+                dispatch(clearSearchedParts());
+            }
+        }, SEARCH_DELAY_MS)
+    ).current;
+
     useEffect(() => {
-        dispatch(fetchInventoryParts() as any);
+        // Clear searched parts when component unmounts
+        return () => {
+            dispatch(clearSearchedParts());
+        };
     }, [dispatch]);
 
     useEffect(() => {
-        if (error) {
-            Alert.alert("Error", error);
+        if (searchError) {
+            Alert.alert("Error", searchError);
             dispatch(clearPartsError());
         }
 
@@ -115,41 +127,11 @@ const RequestPartsScreen = () => {
             Alert.alert("Error", localPurchaseError);
             dispatch(clearPartsError());
         }
-    }, [error, requestError, localPurchaseError, dispatch]);
+    }, [searchError, requestError, localPurchaseError, dispatch]);
 
     useEffect(() => {
-        const handler = setTimeout(() => {
-            setDebouncedSearchQuery(searchQuery);
-            setCurrentPage(1);
-        }, SEARCH_DELAY_MS);
-
-        return () => {
-            clearTimeout(handler);
-        };
-    }, [searchQuery]);
-
-    const { filteredParts, totalPages } = useMemo(() => {
-        if (!inventoryParts || inventoryParts.length === 0) {
-            return { filteredParts: [], totalPages: 0 };
-        }
-
-        let filtered = inventoryParts;
-
-        if (debouncedSearchQuery) {
-            const query = debouncedSearchQuery.toLowerCase();
-            filtered = inventoryParts.filter(part =>
-                part?.part_no?.toLowerCase().includes(query) ||
-                part?.part_name?.toLowerCase().includes(query) ||
-                part?.description?.toLowerCase().includes(query)
-            );
-        }
-
-        const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
-        const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-        const paginatedParts = filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-
-        return { filteredParts: paginatedParts, totalPages };
-    }, [inventoryParts, debouncedSearchQuery, currentPage]);
+        debouncedSearch(searchQuery);
+    }, [searchQuery, debouncedSearch]);
 
     const handleSearchSelect = (part: InventoryPart) => {
         setSearchQuery(part.part_no);
@@ -316,13 +298,11 @@ const RequestPartsScreen = () => {
                     <View style={styles.partInfo}>
                         <Text style={styles.partNo}>{item.part_no}</Text>
                         <Text style={styles.partDesc} numberOfLines={2}>
-                            {item.part_name || item.description}
+                            {item.part_name || item.description || 'No description available'}
                         </Text>
-                        {item.available_quantity !== undefined && (
-                            <Text style={styles.availableText}>
-                                Available: {item.available_quantity}
-                            </Text>
-                        )}
+                        <Text style={styles.availableText}>
+                            Available: {item.quantity || 0}
+                        </Text>
                     </View>
                     <Icon
                         name={selectedParts[item.id] ? "check-box" : "check-box-outline-blank"}
@@ -346,40 +326,6 @@ const RequestPartsScreen = () => {
         </View>
     ), [selectedParts, togglePartSelection, updateQuantity]);
 
-    const renderPaginationControls = () => {
-        if (totalPages <= 1) return null;
-
-        return (
-            <View style={styles.paginationContainer}>
-                <TouchableOpacity
-                    style={[styles.paginationButton, currentPage === 1 && styles.paginationButtonDisabled]}
-                    onPress={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                >
-                    <Icon name="chevron-left" size={20} color={currentPage === 1 ? "#ccc" : "#0FA37F"} />
-                    <Text style={[styles.paginationText, currentPage === 1 && styles.paginationTextDisabled]}>
-                        Previous
-                    </Text>
-                </TouchableOpacity>
-
-                <Text style={styles.paginationInfo}>
-                    Page {currentPage} of {totalPages}
-                </Text>
-
-                <TouchableOpacity
-                    style={[styles.paginationButton, currentPage === totalPages && styles.paginationButtonDisabled]}
-                    onPress={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                >
-                    <Text style={[styles.paginationText, currentPage === totalPages && styles.paginationTextDisabled]}>
-                        Next
-                    </Text>
-                    <Icon name="chevron-right" size={20} color={currentPage === totalPages ? "#ccc" : "#0FA37F"} />
-                </TouchableOpacity>
-            </View>
-        );
-    };
-
     return (
         <SafeAreaView style={styles.safeArea}>
             {/* Sticky Header */}
@@ -402,7 +348,6 @@ const RequestPartsScreen = () => {
                     </TouchableOpacity>
                 </View>
 
-
                 <View style={styles.searchSection}>
                     <View style={styles.searchContainer}>
                         <Icon name="search" size={20} color="#666" style={styles.searchIcon} />
@@ -411,35 +356,37 @@ const RequestPartsScreen = () => {
                             placeholder="Search parts by name, number or description..."
                             value={searchQuery}
                             onChangeText={setSearchQuery}
+                            autoFocus={true}
                         />
                     </View>
 
-                    {debouncedSearchQuery && (
+                    {searchQuery && (
                         <View style={styles.searchInfo}>
                             <Text style={styles.searchInfoText}>
-                                Found {filteredParts.length} results for "{debouncedSearchQuery}"
+                                {searchLoading ? 
+                                    "Searching..." : 
+                                    `Found ${searchedParts.length} results for "${searchQuery}"`
+                                }
                             </Text>
                         </View>
                     )}
                 </View>
 
-                {renderPaginationControls()}
-
-                {loading ? (
+                {searchLoading ? (
                     <ActivityIndicator size="large" color="#0FA37F" style={styles.loader} />
                 ) : (
                     <FlatList
-                        data={filteredParts}
+                        data={searchedParts}
                         keyExtractor={(item) => item.id.toString()}
                         renderItem={renderPartItem}
                         ListEmptyComponent={
                             <View style={styles.emptyContainer}>
                                 <Icon name="inventory" size={50} color="#ccc" />
                                 <Text style={styles.emptyText}>
-                                    {debouncedSearchQuery ? "No parts found" : "No parts available"}
+                                    {searchQuery ? "No parts found" : "Search for parts to request"}
                                 </Text>
                                 <Text style={styles.emptySubText}>
-                                    {debouncedSearchQuery ? "Try a different search term" : "Check back later"}
+                                    {searchQuery ? "Try a different search term" : "Enter part name or number to search"}
                                 </Text>
                             </View>
                         }
@@ -449,7 +396,7 @@ const RequestPartsScreen = () => {
                     />
                 )}
 
-                {(totalSelectedParts > 0 || showLocalPurchaseModal) && (
+                {(totalSelectedParts > 0) && (
                     <TouchableOpacity
                         style={styles.submitButton}
                         onPress={handleSubmit}
@@ -576,6 +523,7 @@ const RequestPartsScreen = () => {
     );
 };
 
+// Styles remain the same as your original file
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,

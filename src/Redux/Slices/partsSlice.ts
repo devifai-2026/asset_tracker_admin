@@ -13,6 +13,8 @@ import {
   WalletResponse,
 } from '../../api/maintenanceApi';
 import { RootState } from '../store';
+import { authClient } from '../../services/api.clients';
+import { APIEndpoints } from '../../services/api.endpoints';
 
 interface PartsState {
   walletParts: WalletPart[];
@@ -171,9 +173,26 @@ export const fetchInventoryPartsAdmin = createAsyncThunk(
   },
 );
 
+export const searchParts = createAsyncThunk(
+  'parts/searchParts',
+  async (searchQuery: string, { rejectWithValue }) => {
+    try {
+      const response = await authClient.get(APIEndpoints.searchParts, {
+        params: { q: searchQuery },
+      });
+      return response.data.data;
+    } catch (error: any) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  },
+);
+
 const partsSlice = createSlice({
   name: 'parts',
   initialState,
+  searchedParts: [],
+  searchLoading: false,
+  searchError: null,
   reducers: {
     clearPartsError: state => {
       state.error = null;
@@ -200,6 +219,10 @@ const partsSlice = createSlice({
     clearInventoryParts: state => {
       state.inventoryParts = [];
       state.inventoryError = null;
+    },
+    clearSearchedParts: state => {
+      state.searchedParts = [];
+      state.searchError = null;
     },
   },
   extraReducers: builder => {
@@ -296,7 +319,21 @@ const partsSlice = createSlice({
       .addCase(fetchInventoryPartsAdmin.rejected, (state, action) => {
         state.inventoryAdminLoading = false;
         state.inventoryAdminError = action.payload as string;
-      });
+      }),
+      builder
+        .addCase(searchParts.pending, state => {
+          state.searchLoading = true;
+          state.searchError = null;
+        })
+        .addCase(searchParts.fulfilled, (state, action) => {
+          state.searchLoading = false;
+          state.searchedParts = action.payload;
+        })
+        .addCase(searchParts.rejected, (state, action) => {
+          state.searchLoading = false;
+          state.searchError = action.payload as string;
+          state.searchedParts = [];
+        });
   },
 });
 
@@ -339,5 +376,14 @@ export const selectInventoryAdminLoading = (state: RootState) =>
   state.parts.inventoryAdminLoading;
 export const selectInventoryAdminError = (state: RootState) =>
   state.parts.inventoryAdminError;
+
+export const selectSearchedParts = (state: RootState) =>
+  state.parts.searchedParts;
+export const selectSearchLoading = (state: RootState) =>
+  state.parts.searchLoading;
+export const selectSearchError = (state: RootState) => state.parts.searchError;
+
+// Export the new action
+export const { clearSearchedParts } = partsSlice.actions;
 
 export default partsSlice.reducer;

@@ -309,7 +309,7 @@ const MaintenanceRatingScreen = () => {
                             category.sub_value.map(sub => (
                                 <View key={sub.id} style={styles.subCategory}>
                                     <Text style={styles.subCategoryTitle}>{sub.titel || `Sub-item ${sub.id}`}</Text>
-                                    <Text style={styles.subCategoryWeight}>Weight: {sub.percentage}%</Text>
+                                    {/* <Text style={styles.subCategoryWeight}>Weight: {sub.percentage}%</Text> */}
 
                                     <View style={styles.ratingOptions}>
                                         {[0, 2.5, 5].map(rating => (
@@ -431,9 +431,9 @@ const MaintenanceRatingScreen = () => {
 
     function getRatingLabel(rating: number): string {
         switch (rating) {
-            case 0: return "Poor (0)";
-            case 2.5: return "Fair (2.5)";
-            case 5: return "Good (5)";
+            case 0: return "Poor";
+            case 2.5: return "Fair";
+            case 5: return "Good";
             default: return "";
         }
     }

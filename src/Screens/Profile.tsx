@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -12,13 +12,13 @@ import {
     Animated,
     Dimensions,
     Alert,
-    Image, // Added Image import
+    Image,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { CommonActions, useNavigation } from '@react-navigation/native';
 import { useDispatch, useSelector } from 'react-redux';
 import { logout, setCurrentRole } from '../Redux/Slices/authSlice';
-import { RootState } from '@reduxjs/toolkit/query';
+import { RootState } from '../Redux/store';
 import { useAuth } from '../hooks/useAuth';
 
 const { height } = Dimensions.get('window');
@@ -33,44 +33,73 @@ const Profile = () => {
     const [showNewPassword, setShowNewPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [slideAnim] = useState(new Animated.Value(height));
+    
     const { isPasswordChanged, permissions, email, currentRole } = useSelector((state: RootState) => state.auth);
 
     console.log("User Permissions:", permissions);
     console.log("User Email:", email);
+    console.log("Current Role:", currentRole);
 
-    const getUserRole = () => {
-        if (permissions?.includes('SERVICE.ALL')) {
-            return 'Service Engineer';
-        }
-        if (permissions?.includes('MAINT.ALL')) {
-            return 'Service Head';
-        }
-        if (permissions?.includes('ADMIN.ALL')) {
+    // Check if user has Service Engineer permission
+    const isServiceEngineer = permissions?.includes('SERVICE.ALL');
+
+    // Check if user has Service Head/Admin permission
+    const isServiceHead = permissions?.includes('MAINT.ALL') || 
+                         permissions?.includes('ASSETS.VIEW') || 
+                         permissions?.includes('ADMIN.ALL');
+
+    // Check if user has multiple roles and can switch
+    const hasMultipleRoles = isServiceEngineer && isServiceHead;
+
+    // Get current role display name
+    const getCurrentRoleDisplay = () => {
+        if (currentRole === 'Service Head' && permissions?.includes('ADMIN.ALL')) {
             return 'Admin';
         }
-        return 'User';
+        return currentRole || 'User';
     };
 
-    const hasMultipleRoles = permissions?.includes('MAINT.ALL') &&
-        permissions?.includes('ASSETS.VIEW') &&
-        permissions?.includes('SERVICE.ALL');
+    // Initialize current role based on permissions
+    useEffect(() => {
+        if (!currentRole && permissions) {
+            if (isServiceHead) {
+                dispatch(setCurrentRole('Service Head'));
+            } else if (isServiceEngineer) {
+                dispatch(setCurrentRole('Service Engineer'));
+            }
+        }
+    }, [permissions, currentRole, dispatch]);
 
     const handleRoleSwitch = async (newRole: string) => {
         try {
+            console.log(`Switching to role: ${newRole}`);
             dispatch(setCurrentRole(newRole));
 
+            // Wait for state update
             await new Promise(resolve => setTimeout(resolve, 100));
 
             const rootNavigation = navigation.getParent() || navigation;
 
-            rootNavigation.dispatch(
-                CommonActions.navigate({
-                    name: newRole === 'Service Engineer' ? 'MainTabs' : 'HeadMainTabs',
-                })
-            );
+            // Reset navigation stack completely
+            if (newRole === 'Service Engineer') {
+                rootNavigation.dispatch(
+                    CommonActions.reset({
+                        index: 0,
+                        routes: [{ name: 'MainTabs' }],
+                    })
+                );
+            } else {
+                rootNavigation.dispatch(
+                    CommonActions.reset({
+                        index: 0,
+                        routes: [{ name: 'HeadMainTabs' }],
+                    })
+                );
+            }
 
         } catch (error) {
             console.log('Role switch error:', error);
+            Alert.alert('Error', 'Failed to switch role. Please try again.');
         }
     };
 
@@ -122,7 +151,10 @@ const Profile = () => {
             const result = await changePassword(payload);
 
             if (result.success) {
+                Alert.alert('Success', 'Password changed successfully');
                 hidePasswordModal();
+            } else {
+                Alert.alert('Error', result.message || 'Failed to change password');
             }
         } catch (error) {
             Alert.alert('Error', 'Failed to change password. Please try again.');
@@ -157,7 +189,7 @@ const Profile = () => {
         <SafeAreaView style={styles.safeArea}>
             <StatusBar backgroundColor="#ffffff" barStyle="dark-content" />
 
-            {/* Header with Back Button and Logo */}
+            {/* Header with Back Button and Logo - Original Structure */}
             <View style={styles.header}>
                 <TouchableOpacity
                     style={styles.backButton}
@@ -166,7 +198,7 @@ const Profile = () => {
                     <Icon name="arrow-left" size={24} color="#000" />
                 </TouchableOpacity>
 
-                {/* Logo and App Name */}
+                {/* Logo and App Name - Original Structure */}
                 <View style={styles.logoContainer}>
                     <Image
                         source={require('../Assets/logo.png')}
@@ -181,7 +213,7 @@ const Profile = () => {
 
             <View style={styles.container}>
                 <ScrollView contentContainerStyle={styles.scrollView}>
-                    {/* Profile Info Section - Read Only */}
+                    {/* Profile Info Section - Original Structure */}
                     <View style={styles.section}>
                         <View style={styles.profileInfo}>
                             <View style={styles.infoRow}>
@@ -191,11 +223,11 @@ const Profile = () => {
 
                             <View style={styles.infoRow}>
                                 <Text style={styles.infoLabel}>Permissions</Text>
-                                <Text style={styles.infoValue}>{getUserRole()}</Text>
+                                <Text style={styles.infoValue}>{getCurrentRoleDisplay()}</Text>
                             </View>
                         </View>
 
-                        {/* Change Password Button */}
+                        {/* Change Password Button - Original Structure */}
                         <TouchableOpacity
                             style={styles.changePasswordButton}
                             onPress={showPasswordModal}
@@ -204,7 +236,7 @@ const Profile = () => {
                             <Text style={styles.changePasswordButtonText}>Change Password</Text>
                         </TouchableOpacity>
 
-                        {/* Logout Button */}
+                        {/* Logout Button - Original Structure */}
                         <TouchableOpacity
                             style={styles.logoutButton}
                             onPress={handleLogout}
@@ -214,11 +246,12 @@ const Profile = () => {
                         </TouchableOpacity>
                     </View>
 
-                    {/* Role Switching Section */}
+                    {/* Role Switching Section - Only show if user has multiple roles */}
                     {hasMultipleRoles && (
                         <View style={styles.roleSwitchSection}>
                             <Text style={styles.roleSwitchTitle}>Switch Role</Text>
                             <View style={styles.roleButtonsContainer}>
+                                {/* Service Head/Admin Button */}
                                 <TouchableOpacity
                                     style={[
                                         styles.roleButton,
@@ -229,7 +262,7 @@ const Profile = () => {
                                     onPress={() => handleRoleSwitch('Service Head')}
                                 >
                                     <Icon
-                                        name="account-tie"
+                                        name={permissions?.includes('ADMIN.ALL') ? "shield-account" : "account-tie"}
                                         size={20}
                                         color={currentRole === 'Service Head' || currentRole === 'Admin' ? '#fff' : '#0FA37F'}
                                     />
@@ -237,10 +270,11 @@ const Profile = () => {
                                         styles.roleButtonText,
                                         { color: currentRole === 'Service Head' || currentRole === 'Admin' ? '#fff' : '#0FA37F' }
                                     ]}>
-                                        Service Head
+                                        {permissions?.includes('ADMIN.ALL') ? 'Admin' : 'Service Head'}
                                     </Text>
                                 </TouchableOpacity>
 
+                                {/* Service Engineer Button */}
                                 <TouchableOpacity
                                     style={[
                                         styles.roleButton,
@@ -268,7 +302,7 @@ const Profile = () => {
                 </ScrollView>
             </View>
 
-            {/* Change Password Modal */}
+            {/* Change Password Modal - Original Structure */}
             <Modal
                 visible={isPasswordModalVisible}
                 transparent={true}
@@ -317,6 +351,7 @@ const Profile = () => {
                                         placeholder="Enter new password"
                                         placeholderTextColor="#999"
                                         secureTextEntry={!showNewPassword}
+                                        autoCapitalize="none"
                                     />
                                     <TouchableOpacity
                                         style={styles.eyeIcon}
@@ -342,6 +377,7 @@ const Profile = () => {
                                         placeholder="Confirm new password"
                                         placeholderTextColor="#999"
                                         secureTextEntry={!showConfirmPassword}
+                                        autoCapitalize="none"
                                     />
                                     <TouchableOpacity
                                         style={styles.eyeIcon}
@@ -378,7 +414,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         justifyContent: 'center',
-
     },
     header: {
         flexDirection: 'row',
@@ -396,7 +431,6 @@ const styles = StyleSheet.create({
     logo: {
         width: 50,
         height: 50,
-        // marginRight: 10,
     },
     logoText: {
         fontSize: 30,
@@ -518,7 +552,6 @@ const styles = StyleSheet.create({
         backgroundColor: '#f0f0f0',
         color: '#666',
     },
-    // Password input container styles
     passwordInputContainer: {
         flexDirection: 'row',
         alignItems: 'center',

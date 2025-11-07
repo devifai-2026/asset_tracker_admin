@@ -111,22 +111,45 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
         }
     };
 
-    // Format datetime for comments
+    // Robust formatDateTime function for GMT time strings
     const formatDateTime = (dateTimeString: string) => {
         if (!dateTimeString) return "N/A";
 
         try {
+            // Parse the GMT date string
             const date = new Date(dateTimeString);
-            if (isNaN(date.getTime())) return "N/A";
+
+            if (isNaN(date.getTime())) {
+                // Fallback: try parsing as is
+                const fallbackDate = new Date(dateTimeString.replace('GMT', ''));
+                if (isNaN(fallbackDate.getTime())) return "N/A";
+
+                const day = fallbackDate.getDate().toString().padStart(2, '0');
+                const month = (fallbackDate.getMonth() + 1).toString().padStart(2, '0');
+                const year = fallbackDate.getFullYear();
+
+                let hours = fallbackDate.getHours();
+                const minutes = fallbackDate.getMinutes().toString().padStart(2, '0');
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                hours = hours % 12;
+                hours = hours ? hours : 12;
+
+                return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
+            }
 
             const day = date.getDate().toString().padStart(2, '0');
             const month = (date.getMonth() + 1).toString().padStart(2, '0');
             const year = date.getFullYear();
-            const hours = date.getHours().toString().padStart(2, '0');
-            const minutes = date.getMinutes().toString().padStart(2, '0');
 
-            return `${day}/${month}/${year} ${hours}:${minutes}`;
+            let hours = date.getHours();
+            const minutes = date.getMinutes().toString().padStart(2, '0');
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+
+            return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
         } catch (error) {
+            console.error('Date formatting error:', error);
             return "N/A";
         }
     };
@@ -148,7 +171,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
         make: maintenanceDetail?.asset?.make || "NCR",
         rentalEndDate: formatDate(maintenanceDetail?.lease_end_date || "NA"),
         lease: maintenanceDetail?.lease || "NA",
-        operator: maintenanceDetail?.lease_operator[0] || "NA",
+        operator: maintenanceDetail?.lease_operator?.length ? maintenanceDetail.lease_operator[0] : "NA",
         salesPerson: maintenanceDetail?.lease_sale_person || "NA"
     };
 
@@ -159,7 +182,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
         breakdownType: maintenanceDetail?.complaint_type || "Hardware",
         breakdownTitle: maintenanceDetail?.complaint || "Machine Not Working",
         breakdownDate: formatDate(maintenanceDetail?.issue_date || "2023-10-14"),
-        priority: maintenanceDetail?.priority || "High",
+        priority: maintenanceDetail?.priority || "NA",
         status: maintenanceDetail?.status || "In Progress",
         deadline: formatDate(maintenanceDetail?.ready_date || "2023-10-20"),
         engineer: maintenanceDetail?.serviceSalePersons?.[0]?.name || "John Doe"
@@ -481,7 +504,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                                                 <Text style={styles.commentAuthor}>
                                                                     {rejectComment.name || "Unknown User"}
                                                                 </Text>
-                                                                <View style={styles.statusContainer}>
+                                                                {/* <View style={styles.statusContainer}>
                                                                     <Icon
                                                                         name={statusInfo.icon}
                                                                         size={16}
@@ -490,7 +513,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                                                     <Text style={[styles.statusText, { color: statusInfo.color }]}>
                                                                         {statusInfo.text}
                                                                     </Text>
-                                                                </View>
+                                                                </View> */}
                                                             </View>
                                                         </View>
                                                     </View>
@@ -554,14 +577,15 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                     ?.filter((person: any) => {
                                         // Check if this person has accepted in reject_comments
                                         const acceptedComment = maintenanceDetail?.reject_comments?.find(
-                                            (comment: any) => comment.name === person.name && comment.is_accepeted === true
+                                            (comment: any) => comment.name === person.name && comment.is_accepted === true
                                         );
+                                        // console.log(acceptedComment)
                                         console.log(`Person: ${person.name}, Accepted: ${acceptedComment !== undefined}`);
                                         return acceptedComment !== undefined;
                                     })
                                     .slice(0, 1) // Take only the first accepted person
                                     .map((person: any, index: number) => {
-                                        console.log("Showing parts button for:", person.name);
+                                        // console.log("Showing parts button for:", person.name);
                                         return (
                                             <TouchableOpacity
                                                 key={index}
@@ -595,6 +619,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                             selectedEngineer={selectedEngineer}
                             selectedPart={selectedPart}
                             selectedPriority={selectedPriority}
+                            setSelectedPriority={setSelectedPriority}
                             selectedDate={selectedDate}
                             formatDate={(date) => {
                                 const day = date.getDate().toString().padStart(2, '0');

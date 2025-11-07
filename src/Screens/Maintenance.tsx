@@ -143,11 +143,6 @@ export const Maintenance = () => {
     return maintenanceList.filter(ticket => ticket.status === status).length;
   };
 
-  const truncateText = (text: string, limit: number) => {
-    if (!text) return "No Title";
-    return text.length > limit ? text.substring(0, limit) + "..." : text;
-  };
-
   const renderTicket = ({ item }: any) => {
     const showEngineer = selectedTab === "in_progress";
     const statusLabel = getStatusLabel(item.status);
@@ -165,54 +160,57 @@ export const Maintenance = () => {
           }
         }}
       >
-        {/* Header */}
+        {/* Header - Ticket ID and Date */}
         <View style={styles.rowBetween}>
-          <View>
+          <View style={styles.flexColumn}>
             <Text style={styles.label}>Ticket ID</Text>
-            <Text style={styles.ticketId}>{item.ticket_no}</Text>
+            <Text style={styles.ticketId} numberOfLines={2} ellipsizeMode="tail">
+              {item.ticket_no}
+            </Text>
           </View>
-          <View style={styles.row}>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.label}>Complain Date</Text>
-              <Text style={styles.complainDate}>{formatDate(item.compaint_date)}</Text>
-            </View>
+          <View style={styles.flexColumn}>
+            <Text style={[styles.label, styles.textRight]}>Complain Date</Text>
+            <Text style={styles.complainDate} numberOfLines={1}>
+              {formatDate(item.compaint_date)}
+            </Text>
           </View>
         </View>
 
         {/* Breakdown Info */}
         <View style={styles.rowBetween}>
-          <View>
+          <View style={styles.flexColumn}>
             <Text style={styles.label}>Breakdown Title</Text>
-            <Text style={styles.breakdownTitle}>
-              {truncateText(item.title, 20)}
+            <Text style={styles.breakdownTitle} numberOfLines={2} ellipsizeMode="tail">
+              {item.title || "No Title"}
             </Text>
           </View>
 
-          <View>
-            <Text style={styles.label}>Asset No</Text>
-            <Text style={styles.breakdownSince}>{item.asset_no}</Text>
+          <View style={styles.flexColumn}>
+            <Text style={[styles.label, styles.textRight]}>Asset No</Text>
+            <Text style={styles.breakdownSince} numberOfLines={2} ellipsizeMode="tail">
+              {item.asset_no}
+            </Text>
           </View>
         </View>
 
+        {/* Service Type and Priority */}
         <View style={styles.rowBetween}>
-          <View>
+          <View style={styles.flexColumn}>
             <Text style={styles.label}>Service Type</Text>
-            <Text style={styles.serviceCategory}>
+            <Text style={styles.serviceCategory} numberOfLines={1}>
               {item.types === "warranty" ? "Warranty" :
                 item.types === "non_warranty" ? "Non-Warranty" :
                   item.types === "safety_notice" ? "Safety Notice" :
-                    item.types}
+                    item.types || "N/A"}
             </Text>
           </View>
           <View style={styles.priorityContainer}>
-            <Text style={styles.label}>Priority</Text>
-            <Text style={[styles.priority, getPriorityStyle(item.priority)]}>
+            <Text style={[styles.label, styles.textRight]}>Priority</Text>
+            <Text style={[styles.priority, getPriorityStyle(item.priority)]} numberOfLines={1}>
               {item.priority || "Not Set"}
             </Text>
           </View>
         </View>
-
-        
       </TouchableOpacity>
     );
   };
@@ -445,10 +443,17 @@ const styles = StyleSheet.create({
   rowBetween: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: 16,
     borderBottomColor: '#eee',
     borderBottomWidth: 1,
-    paddingBottom: 10,
+    paddingBottom: 12,
+  },
+  flexColumn: {
+    flex: 1,
+    flexDirection: 'column',
+  },
+  textRight: {
+    textAlign: 'right',
   },
   label: {
     fontSize: 12,
@@ -461,6 +466,8 @@ const styles = StyleSheet.create({
     fontWeight: "600", 
     color: "#000",
     fontFamily: 'Inter-SemiBold',
+    lineHeight: 20,
+    minHeight: 40,
   },
   complainDate: { 
     fontSize: 14, 
@@ -468,12 +475,15 @@ const styles = StyleSheet.create({
     textAlign: "right", 
     fontWeight: "500",
     fontFamily: 'Inter-Medium',
+    lineHeight: 18,
   },
   breakdownTitle: {
     fontSize: 16,
     fontWeight: "500",
     color: "#000",
     fontFamily: 'Inter-Medium',
+    lineHeight: 20,
+    minHeight: 40,
   },
   breakdownSince: { 
     fontSize: 14, 
@@ -481,15 +491,19 @@ const styles = StyleSheet.create({
     fontWeight: "500", 
     textAlign: "right",
     fontFamily: 'Inter-Medium',
+    lineHeight: 18,
+    minHeight: 36,
   },
   serviceCategory: { 
     fontSize: 14, 
     color: "#333", 
     fontWeight: "500",
     fontFamily: 'Inter-Medium',
+    lineHeight: 18,
   },
   priorityContainer: {
     alignItems: 'flex-end',
+    flex: 1,
   },
   priority: {
     fontSize: 12,
@@ -501,6 +515,8 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "700" as const,
     fontFamily: 'Inter-Bold',
+    textAlign: 'center',
+    minWidth: 70,
   },
   status: {
     color: "#1271EE",

@@ -150,7 +150,7 @@ interface MaintenanceState {
 }
 
 export interface AcceptMaintenancePayload {
-  is_accepeted: boolean;
+  is_accepted: boolean;
   comment: string;
   maintenance_id: string;
 }

@@ -126,16 +126,51 @@ export const HeadMaintenance = () => {
         }
     };
 
-    // Replace the filter function with this:
-    const filteredTickets = (maintenanceList || []).filter((ticket) => {
-        const matchesTab = ticket.status === selectedTab;
-        const matchesSearch = searchText === "" ||
-            ticket.ticket_no.toLowerCase().includes(searchText.toLowerCase()) ||
-            (ticket.title && ticket.title.toLowerCase().includes(searchText.toLowerCase())) ||
-            ticket.asset_no.toLowerCase().includes(searchText.toLowerCase());
+    // Simpler version without helper function
+    const filteredTickets = (maintenanceList || [])
+        .filter((ticket) => {
+            const matchesTab = ticket.status === selectedTab;
+            const matchesSearch = searchText === "" ||
+                ticket.ticket_no.toLowerCase().includes(searchText.toLowerCase()) ||
+                (ticket.title && ticket.title.toLowerCase().includes(searchText.toLowerCase())) ||
+                ticket.asset_no.toLowerCase().includes(searchText.toLowerCase());
 
-        return matchesTab && matchesSearch;
-    });
+            return matchesTab && matchesSearch;
+        })
+        .sort((a, b) => {
+            // Helper function inside the sort
+            const parseDate = (dateString: string): Date | null => {
+                if (!dateString) return null;
+                try {
+                    const date = new Date(dateString);
+                    return isNaN(date.getTime()) ? null : date;
+                } catch {
+                    return null;
+                }
+            };
+
+            // First, sort by breakdown date (oldest first)
+            const dateA = parseDate(a.issue_date);
+            const dateB = parseDate(b.issue_date);
+
+            if (dateA && dateB) {
+                const dateComparison = dateA.getTime() - dateB.getTime();
+                if (dateComparison !== 0) {
+                    return dateComparison;
+                }
+            }
+
+            // If breakdown dates are the same or invalid, sort by create date (oldest first)
+            const createDateA = parseDate(a.compaint_date || a.created_at);
+            const createDateB = parseDate(b.compaint_date || b.created_at);
+
+            if (createDateA && createDateB) {
+                return createDateA.getTime() - createDateB.getTime();
+            }
+
+            // Fallback: sort by ticket ID if dates are invalid
+            return a.id - b.id;
+        });
 
     const truncateText = (text: string, limit: number) => {
         if (!text) return "No Title";
@@ -315,13 +350,13 @@ export const HeadMaintenance = () => {
                     ].map((tab) => {
                         const isActive = selectedTab === tab.key;
                         const activeColor = getTabActiveColor(tab.key);
-                        
+
                         return (
                             <TouchableOpacity
                                 key={tab.key}
                                 style={[
                                     styles.tab,
-                                    isActive && { 
+                                    isActive && {
                                         borderBottomColor: activeColor,
                                         borderBottomWidth: 2,
                                         paddingBottom: 4
@@ -466,8 +501,8 @@ const styles = StyleSheet.create({
         marginBottom: 16,
         marginTop: 16,
     },
-    tab: { 
-        flexDirection: "row", 
+    tab: {
+        flexDirection: "row",
         alignItems: "center",
         paddingBottom: 4,
     },

@@ -48,14 +48,14 @@ const ClosedAssetDetails = () => {
     // Universal date formatter that handles multiple input formats
     const formatDate = (dateString: string) => {
         if (!dateString) return "N/A";
-        
+
         try {
             // Remove any extra spaces and trim
             dateString = dateString.toString().trim();
-            
+
             // Handle different separator types and formats
             let date;
-            
+
             // Try parsing as ISO format (YYYY-MM-DD)
             if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(dateString)) {
                 const [year, month, day] = dateString.split('-');
@@ -80,41 +80,64 @@ const ClosedAssetDetails = () => {
             else {
                 date = new Date(dateString);
             }
-            
+
             // Check if date is valid
             if (isNaN(date.getTime())) {
                 return "N/A";
             }
-            
+
             // Format to DD/MM/YYYY
             const day = date.getDate().toString().padStart(2, '0');
             const month = (date.getMonth() + 1).toString().padStart(2, '0');
             const year = date.getFullYear();
-            
+
             return `${day}/${month}/${year}`;
-            
+
         } catch (error) {
             console.error('Date formatting error:', error);
             return "N/A";
         }
     };
 
-    // Format datetime for comments
+    // Robust formatDateTime function for GMT time strings
     const formatDateTime = (dateTimeString: string) => {
         if (!dateTimeString) return "N/A";
-        
+
         try {
+            // Parse the GMT date string
             const date = new Date(dateTimeString);
-            if (isNaN(date.getTime())) return "N/A";
-            
+
+            if (isNaN(date.getTime())) {
+                // Fallback: try parsing as is
+                const fallbackDate = new Date(dateTimeString.replace('GMT', ''));
+                if (isNaN(fallbackDate.getTime())) return "N/A";
+
+                const day = fallbackDate.getDate().toString().padStart(2, '0');
+                const month = (fallbackDate.getMonth() + 1).toString().padStart(2, '0');
+                const year = fallbackDate.getFullYear();
+
+                let hours = fallbackDate.getHours();
+                const minutes = fallbackDate.getMinutes().toString().padStart(2, '0');
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                hours = hours % 12;
+                hours = hours ? hours : 12;
+
+                return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
+            }
+
             const day = date.getDate().toString().padStart(2, '0');
             const month = (date.getMonth() + 1).toString().padStart(2, '0');
             const year = date.getFullYear();
-            const hours = date.getHours().toString().padStart(2, '0');
+
+            let hours = date.getHours();
             const minutes = date.getMinutes().toString().padStart(2, '0');
-            
-            return `${day}/${month}/${year} ${hours}:${minutes}`;
+            const ampm = hours >= 12 ? 'PM' : 'AM';
+            hours = hours % 12;
+            hours = hours ? hours : 12;
+
+            return `${day}/${month}/${year} ${hours}:${minutes} ${ampm}`;
         } catch (error) {
+            console.error('Date formatting error:', error);
             return "N/A";
         }
     };
@@ -176,7 +199,7 @@ const ClosedAssetDetails = () => {
     return (
         <SafeAreaView style={styles.safeArea}>
             <StatusBar backgroundColor="#ffffff" barStyle="dark-content" />
-            
+
             {/* Sticky Header */}
             <View style={styles.stickyHeader}>
                 <Header />
@@ -243,7 +266,7 @@ const ClosedAssetDetails = () => {
                     />
                     <Row label="Deadline" value={formatDate(ready_date)} />
                     <Row label="Closure Date" value={formatDate(closer_date)} />
-                    
+
                     {/* Description */}
                     <View style={styles.descriptionContainer}>
                         <Text style={styles.label}>Breakdown Description</Text>
@@ -412,8 +435,8 @@ const styles = StyleSheet.create({
         shadowRadius: 4,
         elevation: 1,
     },
-    accordionTitle: { 
-        fontWeight: "600", 
+    accordionTitle: {
+        fontWeight: "600",
         fontSize: 16,
         fontFamily: 'Inter-SemiBold',
     },
@@ -434,9 +457,9 @@ const styles = StyleSheet.create({
         alignItems: "center",
         marginBottom: 10,
     },
-    cardTitle: { 
-        fontSize: 16, 
-        fontWeight: "600", 
+    cardTitle: {
+        fontSize: 16,
+        fontWeight: "600",
         marginBottom: 8,
         fontFamily: 'Inter-SemiBold',
     },
@@ -445,13 +468,13 @@ const styles = StyleSheet.create({
         justifyContent: "space-between",
         marginVertical: 5,
     },
-    label: { 
-        fontSize: 14, 
+    label: {
+        fontSize: 14,
         color: "#666",
         fontFamily: 'Inter-Regular',
     },
-    value: { 
-        fontSize: 14, 
+    value: {
+        fontSize: 14,
         fontWeight: "500",
         fontFamily: 'Inter-Medium',
     },
@@ -485,7 +508,7 @@ const styles = StyleSheet.create({
     badgeClosed: {
         backgroundColor: "#6c757d",
     },
-    
+
     // Comment Section Styles
     commentsContainer: {
         marginTop: 10,
@@ -579,7 +602,7 @@ const styles = StyleSheet.create({
         marginLeft: 6,
         fontFamily: 'Inter-Regular',
     },
-    
+
     errorText: {
         color: "#ff0202",
         fontSize: 16,

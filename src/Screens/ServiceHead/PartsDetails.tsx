@@ -1,5 +1,5 @@
 // PartsDetails.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
     Text,
@@ -9,11 +9,13 @@ import {
     Modal,
     FlatList,
     ScrollView,
-    Alert
+    Alert,
+    RefreshControl
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { Header } from "../Header";
-import { maintenanceApi } from "../../api/maintenanceApi"; // Adjust path as needed
+import { maintenanceApi } from "../../api/maintenanceApi";
+import { useFocusEffect } from '@react-navigation/native';
 
 const PartsDetails = ({ navigation, route }: any) => {
     const [searchText, setSearchText] = useState("");
@@ -25,19 +27,18 @@ const PartsDetails = ({ navigation, route }: any) => {
     const [activeTab, setActiveTab] = useState("all");
     const [statusFilter, setStatusFilter] = useState("all");
     const [approveQuantities, setApproveQuantities] = useState<{ [key: string]: string }>({});
+    const [refreshing, setRefreshing] = useState(false);
 
     // Get serviceSalePersons data from navigation params
     const { serviceSalePersons } = route.params || [];
-
-    console.log("Service Sale Persons Received:", serviceSalePersons);
 
     // Convert data to the format expected by the component
     const [partsData, setPartsData] = useState<any[]>([]);
     const [engineersData, setEngineersData] = useState<any[]>([]);
 
-    console.log(".////////////////////////////////////", partsData)
-
-    useEffect(() => {
+    // Function to load parts data
+    const loadPartsData = useCallback(() => {
+        console.log("Loading parts data...");
         if (serviceSalePersons && serviceSalePersons.length > 0) {
             // Get maintenanceId from route params
             const { maintenanceId } = route.params || {};
@@ -82,6 +83,34 @@ const PartsDetails = ({ navigation, route }: any) => {
             setPartsData(allParts);
         }
     }, [serviceSalePersons, route.params]);
+
+    // Load data on component mount and when focused
+    useEffect(() => {
+        loadPartsData();
+    }, [loadPartsData]);
+
+    // Refresh when screen comes into focus
+    useFocusEffect(
+        useCallback(() => {
+            loadPartsData();
+        }, [loadPartsData])
+    );
+
+    // Refresh function for manual refresh
+    const refreshPartsData = () => {
+        setRefreshing(true);
+        loadPartsData();
+        setTimeout(() => setRefreshing(false), 1000);
+    };
+
+    // Update the navigation to AddPartsScreen to include callback
+    const navigateToAddParts = () => {
+        navigation.navigate('AddParts', {
+            maintenanceId: route.params.maintenanceId,
+            serviceSalePersonId: serviceSalePersons.length > 0 ? serviceSalePersons[0].id : null,
+            onPartsAdded: refreshPartsData // Pass callback to refresh data when returning
+        });
+    };
 
     // Filter parts based on active tab and status filter
     const filteredParts = partsData.filter(part => {
@@ -295,10 +324,7 @@ const PartsDetails = ({ navigation, route }: any) => {
 
                 <TouchableOpacity
                     style={styles.addButtonTop}
-                    onPress={() => navigation.navigate('AddParts', {
-                        maintenanceId: route.params.maintenanceId,
-                        serviceSalePersonId: serviceSalePersons.length > 0 ? serviceSalePersons[0].id : null
-                    })}
+                    onPress={navigateToAddParts}
                 >
                     <Icon name="plus" size={16} color="#ffffff" style={styles.plusIcon} />
                     <Text style={styles.addButtonText}>Add New</Text>
@@ -353,6 +379,14 @@ const PartsDetails = ({ navigation, route }: any) => {
                 renderItem={renderPartItem}
                 keyExtractor={item => item.id}
                 contentContainerStyle={styles.listContainer}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={refreshPartsData}
+                        colors={["#00BFA5"]}
+                        tintColor="#00BFA5"
+                    />
+                }
                 ListEmptyComponent={
                     <View style={styles.emptyContainer}>
                         <Text style={styles.emptyText}>No parts found</Text>

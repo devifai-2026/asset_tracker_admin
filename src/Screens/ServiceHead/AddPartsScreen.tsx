@@ -1,5 +1,5 @@
-// AddPartsScreen.tsx
-import React, { useState, useEffect } from "react";
+// AddPartsScreen.tsx - সম্পূর্ণ ফাইলটি replace করুন
+import React, { useState, useEffect, useRef } from "react";
 import {
     View,
     Text,
@@ -16,17 +16,19 @@ import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { Header } from "../Header";
 import { useDispatch, useSelector } from "react-redux";
 import { 
-  fetchInventoryPartsAdmin, 
+  searchParts, 
   assignParts, 
-  selectInventoryAdminParts, 
-  selectInventoryAdminLoading 
+  selectSearchedParts, 
+  selectSearchLoading,
+  clearSearchedParts
 } from "../../Redux/Slices/partsSlice";
+import debounce from 'lodash/debounce';
 
 const AddPartsScreen = ({ navigation, route }: any) => {
-    const { maintenanceId, serviceSalePersonId } = route.params;
+    const { maintenanceId, serviceSalePersonId, onPartsAdded } = route.params;
     const dispatch = useDispatch();
-    const inventoryParts = useSelector(selectInventoryAdminParts);
-    const inventoryLoading = useSelector(selectInventoryAdminLoading);
+    const searchedParts = useSelector(selectSearchedParts);
+    const searchLoading = useSelector(selectSearchLoading);
 
     const [searchText, setSearchText] = useState("");
     const [selectedParts, setSelectedParts] = useState<{ [key: string]: { part_no: string, quantity: number } }>({});
@@ -34,17 +36,29 @@ const AddPartsScreen = ({ navigation, route }: any) => {
     const [showQuantityDrawer, setShowQuantityDrawer] = useState(false);
     const [currentEditingPart, setCurrentEditingPart] = useState<any>(null);
 
-    console.log("Maintenance ID:", maintenanceId);
-    console.log("Service Sale Person ID:", serviceSalePersonId);
+    // Debounced search function
+    const debouncedSearch = useRef(
+        debounce((query: string) => {
+            if (query.trim().length > 0) {
+                dispatch(searchParts(query) as any);
+            }
+        }, 500)
+    ).current;
 
     useEffect(() => {
-        dispatch(fetchInventoryPartsAdmin() as any);
+        // Clear searched parts when component unmounts
+        return () => {
+            dispatch(clearSearchedParts());
+        };
     }, [dispatch]);
 
-    const filteredParts = inventoryParts.filter(part =>
-        part.part_no.toLowerCase().includes(searchText.toLowerCase()) ||
-        part.description.toLowerCase().includes(searchText.toLowerCase())
-    );
+    useEffect(() => {
+        if (searchText.trim().length > 0) {
+            debouncedSearch(searchText);
+        } else {
+            dispatch(clearSearchedParts());
+        }
+    }, [searchText, debouncedSearch, dispatch]);
 
     const togglePartSelection = (part: any) => {
         setSelectedParts(prev => {
@@ -66,10 +80,6 @@ const AddPartsScreen = ({ navigation, route }: any) => {
 
     const updateQuantity = (partId: string, newQuantity: number) => {
         if (newQuantity < 1) return;
-        if (newQuantity > (currentEditingPart?.available_quantity || 1)) {
-            Alert.alert("Error", "Quantity cannot exceed available stock");
-            return;
-        }
 
         setSelectedParts(prev => ({
             ...prev,
@@ -128,6 +138,12 @@ const AddPartsScreen = ({ navigation, route }: any) => {
 
             await dispatch(assignParts(partsPayload) as any);
             Alert.alert("Success", "Parts assigned successfully");
+            
+            // Call the callback to refresh data in PartsDetails
+            if (onPartsAdded) {
+                onPartsAdded();
+            }
+            
             navigation.goBack();
         } catch (error) {
             Alert.alert("Error", "Failed to assign parts");
@@ -152,10 +168,10 @@ const AddPartsScreen = ({ navigation, route }: any) => {
             <View style={styles.partInfo}>
                 <Text style={styles.partNumber}>{item.part_no}</Text>
                 <Text style={styles.partDescription} numberOfLines={2}>
-                    {item.description}
+                    {item.description || 'No description available'}
                 </Text>
                 <Text style={styles.stockText}>
-                    In Stock: {item.available_quantity}
+                    In Stock: {item.quantity || 0}
                 </Text>
             </View>
 
@@ -203,10 +219,11 @@ const AddPartsScreen = ({ navigation, route }: any) => {
             <View style={styles.searchContainer}>
                 <TextInput
                     style={styles.searchInput}
-                    placeholder="Search parts..."
+                    placeholder="Search parts by name or number..."
                     value={searchText}
                     onChangeText={setSearchText}
                     placeholderTextColor="#9E9E9E"
+                    autoFocus={true}
                 />
                 <Icon name="magnify" size={20} color="#9E9E9E" />
             </View>
@@ -223,14 +240,14 @@ const AddPartsScreen = ({ navigation, route }: any) => {
                 </View>
             )}
 
-            {inventoryLoading ? (
+            {searchLoading ? (
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#00BFA5" />
-                    <Text style={styles.loadingText}>Loading parts...</Text>
+                    <Text style={styles.loadingText}>Searching parts...</Text>
                 </View>
             ) : (
                 <FlatList
-                    data={filteredParts}
+                    data={searchedParts}
                     renderItem={renderPartItem}
                     keyExtractor={item => item.id.toString()}
                     contentContainerStyle={styles.listContainer}
@@ -239,7 +256,11 @@ const AddPartsScreen = ({ navigation, route }: any) => {
                     windowSize={10}
                     ListEmptyComponent={
                         <View style={styles.emptyContainer}>
-                            <Text style={styles.emptyText}>No parts found</Text>
+                            {searchText.length > 0 ? (
+                                <Text style={styles.emptyText}>No parts found for "{searchText}"</Text>
+                            ) : (
+                                <Text style={styles.emptyText}>Search for parts to add</Text>
+                            )}
                         </View>
                     }
                 />
@@ -282,7 +303,7 @@ const AddPartsScreen = ({ navigation, route }: any) => {
 
                         <View style={styles.quantityAdjustContainer}>
                             <Text style={styles.availableStock}>
-                                Available Stock: {currentEditingPart?.available_quantity}
+                                Available Stock: {currentEditingPart?.quantity || 0}
                             </Text>
                             
                             <View style={styles.quantityControls}>
@@ -325,6 +346,7 @@ const AddPartsScreen = ({ navigation, route }: any) => {
     );
 };
 
+// Styles remain the same as your original file
 const styles = StyleSheet.create({
     container: {
         flex: 1,

@@ -6,7 +6,7 @@ export const APIEndpoints = {
   forgotPasword: '/sale-service/forgot-password',
 
   // Maintanance
-  getOwnMaintenanceList: '/sale-service/get-own-maintance-list',
+  getOwnMaintenanceList: '/sale-service/get-own-maintanance-list',
   getMaintenanceById: '/sale-service/get-own-maintance-id',
   acceptMaintenance: '/sale-service/accept-maintenance',
   getOwnWallet: '/sale-service/get-own-wallet',
@@ -28,6 +28,7 @@ export const APIEndpoints = {
   removePart: '/sale-service/remove-part',
   getAllInventoryPart: '/sale-service/get-all-inventory-part',
   getAllInventoryPartAdmin: '/maintenance/get-all-inventory-part',
+  searchParts: '/sale-service/search-part-inventory',
   approvePartsRequest: 'maintenance/edit-aproval-list',
   assignParts: 'maintenance/assign-part',
 
@@ -46,5 +47,4 @@ export const APIEndpoints = {
   // sale service
   uploadPhoto: '/sale-service/upload_photo',
   addCommentSale: '/sale-service/add-comment',
-
 };
