@@ -24,8 +24,22 @@ import { WalletPart } from "../api/maintenanceApi";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../Utils/types";
 import { Header } from "./Header";
+import { authClient } from "../services/api.clients";
+import { APIEndpoints } from "../services/api.endpoints";
+
 
 const { height } = Dimensions.get('window');
+
+// Install Part API Function
+const installPart = async (installData: any[]): Promise<any> => {
+  try {
+    const response = await authClient.post(APIEndpoints.installPart, installData);
+    return response.data;
+  } catch (error) {
+    console.error('Install part error:', error);
+    throw error;
+  }
+};
 
 const SePartsDetails = () => {
     const route = useRoute();
@@ -47,6 +61,7 @@ const SePartsDetails = () => {
     const [drawerHeight] = useState(new Animated.Value(0));
     const [searchQuery, setSearchQuery] = useState("");
     const [refreshing, setRefreshing] = useState(false);
+    const [installing, setInstalling] = useState(false);
 
     // Fetch data on component mount and when screen comes into focus
     const loadData = useCallback(() => {
@@ -83,6 +98,19 @@ const SePartsDetails = () => {
         }
     };
 
+    // Helper function to check if part is already installed
+    const isPartInstalled = (part: WalletPart) => {
+        return part.install_quantity !== null && part.install_quantity > 0;
+    };
+
+    // Helper function to check if part can be selected for installation
+    const canSelectPartForInstallation = (part: WalletPart) => {
+        return part.is_approved && 
+               !part.is_removal_part && 
+               !isPartInstalled(part) &&
+               part.approve_quantity > 0;
+    };
+
     const togglePartSelection = (part: WalletPart) => {
         if (selectedParts.some(p => p.id === part.id)) {
             setSelectedParts(selectedParts.filter(p => p.id !== part.id));
@@ -99,13 +127,30 @@ const SePartsDetails = () => {
     };
 
     const handleQuantityChange = (partId: number, value: string) => {
+        // Allow only numbers
+        const numericValue = value.replace(/[^0-9]/g, '');
         setQuantityInputs({
             ...quantityInputs,
-            [partId]: value
+            [partId]: numericValue
         });
     };
 
-    const handleInstallSubmit = () => {
+    const handleInstallSubmit = async () => {
+        if (installing) return;
+
+        // Validate quantities
+        for (const part of selectedParts) {
+            const quantity = parseInt(quantityInputs[part.id] || "0");
+            if (quantity <= 0) {
+                Alert.alert("Error", `Please enter a valid quantity for part ${part.part_no}`);
+                return;
+            }
+            if (quantity > part.approve_quantity) {
+                Alert.alert("Error", `Cannot install more than approved quantity (${part.approve_quantity}) for part ${part.part_no}`);
+                return;
+            }
+        }
+
         const installData = selectedParts.map(part => ({
             part_id: part.id,
             maintenance_id: part.maintenance_id,
@@ -113,13 +158,28 @@ const SePartsDetails = () => {
         }));
 
         console.log("Install data:", installData);
-        // Call API with installData
-        Alert.alert("Success", "Parts installation request submitted");
-        closeInstallDrawer();
-        setSelectedParts([]);
-        setQuantityInputs({});
-        // Refresh data after installation
-        loadData();
+        
+        setInstalling(true);
+        try {
+            // Call the installPart API directly
+            await installPart(installData);
+            
+            Alert.alert("Success", "Parts installed successfully!");
+            closeInstallDrawer();
+            setSelectedParts([]);
+            setQuantityInputs({});
+            
+            // Refresh data after installation
+            loadData();
+        } catch (error: any) {
+            console.error("Installation error:", error);
+            Alert.alert(
+                "Error", 
+                error.response?.data?.message || "Failed to install parts. Please try again."
+            );
+        } finally {
+            setInstalling(false);
+        }
     };
 
     const openInstallDrawer = () => {
@@ -167,7 +227,7 @@ const SePartsDetails = () => {
         .filter(part => {
             switch (filter) {
                 case "installed":
-                    return part.install_quantity !== null && part.install_quantity > 0;
+                    return isPartInstalled(part);
                 case "removed":
                     return part.is_removal_part;
                 case "approved":
@@ -190,18 +250,21 @@ const SePartsDetails = () => {
         });
 
     const getStatusColor = (part: WalletPart) => {
-        if (part.is_approved) return "#0FA37F";
-        if (part.is_removal_part) return "#dc3545";
-        return "#f7b267";
+        if (isPartInstalled(part)) return "#2196F3"; // Blue for installed
+        if (part.is_approved) return "#0FA37F"; // Green for approved
+        if (part.is_removal_part) return "#dc3545"; // Red for removal
+        return "#f7b267"; // Orange for pending
     };
 
     const getStatusText = (part: WalletPart) => {
+        if (isPartInstalled(part)) return "Installed";
         if (part.is_approved) return "Approved";
         if (part.is_removal_part) return "Removal Part";
         return "Pending Approval";
     };
 
     const getStatusIcon = (part: WalletPart) => {
+        if (isPartInstalled(part)) return "check-circle";
         if (part.is_approved) return "check-circle";
         if (part.is_removal_part) return "remove-circle";
         return "pending";
@@ -233,7 +296,6 @@ const SePartsDetails = () => {
         );
     }
 
-
     console.log("Rendering SePartsDetails with maintenanceId:", maintenanceId, "and status:", status);
 
     return (
@@ -242,8 +304,10 @@ const SePartsDetails = () => {
             <View style={styles.stickyHeader}>
                 <Header />
             </View>
+            
+            {/* Main Content */}
             <View style={styles.container}>
-                {/* Updated Header */}
+                {/* Header */}
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                         <Icon name="arrow-back" size={24} color="#333" />
@@ -270,7 +334,6 @@ const SePartsDetails = () => {
                             </>
                         )}
                     </View>
-
                 </View>
 
                 {/* Search Bar */}
@@ -340,17 +403,6 @@ const SePartsDetails = () => {
                     </ScrollView>
                 </View>
 
-                {/* Install Button */}
-                {selectedParts.length > 0 && (
-                    <TouchableOpacity
-                        style={[styles.installFloatingButton]}
-                        onPress={openInstallDrawer}
-                    >
-                        <Icon name="build" size={20} color="#fff" />
-                        <Text style={styles.installButtonText}>Install ({selectedParts.length})</Text>
-                    </TouchableOpacity>
-                )}
-
                 {/* Parts List */}
                 <FlatList
                     data={filteredParts}
@@ -380,7 +432,8 @@ const SePartsDetails = () => {
                                 </View>
 
                                 <View style={styles.headerRightActions}>
-                                    {item.is_approved && !item.is_removal_part && (
+                                    {/* Only show checkbox for parts that can be installed */}
+                                    {canSelectPartForInstallation(item) && (
                                         <TouchableOpacity
                                             onPress={() => togglePartSelection(item)}
                                             style={styles.checkboxContainer}
@@ -419,8 +472,8 @@ const SePartsDetails = () => {
                                         <Text style={styles.detailValue}>{item.comsumed_quantity !== null ? item.comsumed_quantity : "N/A"}</Text>
                                     </View>
                                     <View style={styles.detailRow}>
-                                        <Text style={styles.detailLabel}>Install Quantity:</Text>
-                                        <Text style={styles.detailValue}>{item.install_quantity !== null ? item.install_quantity : "N/A"}</Text>
+                                        <Text style={styles.detailLabel}>Installed Quantity:</Text>
+                                        <Text style={styles.detailValue}>{item.install_quantity !== null ? item.install_quantity : "0"}</Text>
                                     </View>
                                     <View style={styles.detailRow}>
                                         <Text style={styles.detailLabel}>Requested Date:</Text>
@@ -429,14 +482,14 @@ const SePartsDetails = () => {
                                         </Text>
                                     </View>
                                     <View style={styles.detailRow}>
-                                        <Text style={styles.detailLabel}>Maintenance ID:</Text>
-                                        <Text style={[styles.detailValue, styles.maintenanceId]} numberOfLines={1} ellipsizeMode="middle">
-                                            {item.maintenance_id}
-                                        </Text>
-                                    </View>
-                                    <View style={styles.detailRow}>
                                         <Text style={styles.detailLabel}>Part Inventory ID:</Text>
                                         <Text style={styles.detailValue}>{item.part_inventory_id || "N/A"}</Text>
+                                    </View>
+                                    <View style={styles.detailRow}>
+                                        <Text style={styles.detailLabel}>Install Status:</Text>
+                                        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item) }]}>
+                                            <Text style={styles.statusText}>{getStatusText(item)}</Text>
+                                        </View>
                                     </View>
                                 </View>
                             )}
@@ -464,51 +517,72 @@ const SePartsDetails = () => {
                     }
                 />
 
-                {/* Install Drawer */}
-                {showInstallDrawer && (
-                    <View style={styles.overlay}>
-                        <Animated.View
-                            style={[styles.drawerContainer, { height: drawerHeight }]}
-                            {...panResponder.panHandlers}
-                        >
-                            <View style={styles.drawerHandle} />
-                            <Text style={styles.drawerTitle}>Install Parts</Text>
-
-                            <FlatList
-                                data={selectedParts}
-                                keyExtractor={(item) => item.id.toString()}
-                                renderItem={({ item }) => (
-                                    <View style={styles.drawerPartItem}>
-                                        <Text style={styles.drawerPartNo}>{item.part_no}</Text>
-                                        <TextInput
-                                            style={styles.quantityInput}
-                                            value={quantityInputs[item.id] || ""}
-                                            onChangeText={(text) => handleQuantityChange(item.id, text)}
-                                            keyboardType="numeric"
-                                            placeholder="Quantity"
-                                        />
-                                    </View>
-                                )}
-                            />
-
-                            <View style={styles.drawerButtons}>
-                                <TouchableOpacity
-                                    style={[styles.drawerButton, styles.cancelButton]}
-                                    onPress={closeInstallDrawer}
-                                >
-                                    <Text style={styles.drawerButtonText}>Cancel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.drawerButton, styles.submitButton]}
-                                    onPress={handleInstallSubmit}
-                                >
-                                    <Text style={styles.drawerButtonText}>Submit</Text>
-                                </TouchableOpacity>
-                            </View>
-                        </Animated.View>
-                    </View>
+                {/* Install Floating Button */}
+                {selectedParts.length > 0 && !showInstallDrawer && (
+                    <TouchableOpacity
+                        style={styles.installFloatingButton}
+                        onPress={openInstallDrawer}
+                    >
+                        <Icon name="build" size={20} color="#fff" />
+                        <Text style={styles.installButtonText}>Install ({selectedParts.length})</Text>
+                    </TouchableOpacity>
                 )}
             </View>
+
+            {/* Install Drawer - Outside main content with absolute positioning */}
+            {showInstallDrawer && (
+                <View style={styles.overlay}>
+                    <Animated.View
+                        style={[styles.drawerContainer, { height: drawerHeight }]}
+                        {...panResponder.panHandlers}
+                    >
+                        <View style={styles.drawerHandle} />
+                        <Text style={styles.drawerTitle}>Install Parts</Text>
+
+                        <FlatList
+                            data={selectedParts}
+                            keyExtractor={(item) => item.id.toString()}
+                            renderItem={({ item }) => (
+                                <View style={styles.drawerPartItem}>
+                                    <View style={styles.drawerPartInfo}>
+                                        <Text style={styles.drawerPartNo}>{item.part_no}</Text>
+                                        <Text style={styles.drawerApprovedQty}>Approved: {item.approve_quantity}</Text>
+                                    </View>
+                                    <TextInput
+                                        style={styles.quantityInput}
+                                        value={quantityInputs[item.id] || ""}
+                                        onChangeText={(text) => handleQuantityChange(item.id, text)}
+                                        keyboardType="numeric"
+                                        placeholder="Qty"
+                                        maxLength={5}
+                                    />
+                                </View>
+                            )}
+                        />
+
+                        <View style={styles.drawerButtons}>
+                            <TouchableOpacity
+                                style={[styles.drawerButton, styles.cancelButton]}
+                                onPress={closeInstallDrawer}
+                                disabled={installing}
+                            >
+                                <Text style={styles.drawerButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.drawerButton, styles.submitButton, installing && styles.submitButtonDisabled]}
+                                onPress={handleInstallSubmit}
+                                disabled={installing}
+                            >
+                                {installing ? (
+                                    <ActivityIndicator size="small" color="#fff" />
+                                ) : (
+                                    <Text style={styles.drawerButtonText}>Submit</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </Animated.View>
+                </View>
+            )}
         </SafeAreaView>
     );
 };
@@ -538,6 +612,7 @@ const styles = StyleSheet.create({
         padding: 15,
         borderBottomWidth: 1,
         borderBottomColor: "#eee",
+        backgroundColor: "#fff",
     },
     backButton: {
         padding: 5,
@@ -646,7 +721,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 12,
         borderRadius: 25,
-        zIndex: 1000,
+        zIndex: 999,
         elevation: 5,
         shadowColor: "#000",
         shadowOffset: { width: 0, height: 2 },
@@ -765,18 +840,19 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontWeight: "600",
     },
-    // Drawer styles
+    // Drawer styles with higher z-index
     overlay: {
         ...StyleSheet.absoluteFillObject,
         backgroundColor: 'rgba(0, 0, 0, 0.5)',
         justifyContent: 'flex-end',
-        zIndex: 1001,
+        zIndex: 1000, // Higher z-index to ensure it's above everything
     },
     drawerContainer: {
         backgroundColor: '#fff',
         borderTopLeftRadius: 16,
         borderTopRightRadius: 16,
         padding: 20,
+        maxHeight: height * 0.7,
     },
     drawerHandle: {
         width: 40,
@@ -800,9 +876,17 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: "#eee",
     },
+    drawerPartInfo: {
+        flex: 1,
+    },
     drawerPartNo: {
         fontSize: 16,
         fontWeight: "500",
+    },
+    drawerApprovedQty: {
+        fontSize: 12,
+        color: "#666",
+        marginTop: 2,
     },
     quantityInput: {
         borderWidth: 1,
@@ -811,6 +895,7 @@ const styles = StyleSheet.create({
         padding: 8,
         width: 80,
         textAlign: "center",
+        fontSize: 16,
     },
     drawerButtons: {
         flexDirection: "row",
@@ -828,6 +913,9 @@ const styles = StyleSheet.create({
     },
     submitButton: {
         backgroundColor: "#0FA37F",
+    },
+    submitButtonDisabled: {
+        backgroundColor: "#ccc",
     },
     drawerButtonText: {
         color: "#fff",

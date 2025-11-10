@@ -4,9 +4,11 @@ import {
     TouchableOpacity,
     Text,
     StyleSheet,
+    Dimensions,
 } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import Icon from 'react-native-vector-icons/Ionicons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Maintenance } from '../Screens/Maintenance';
 import { Notifications } from '../Screens/Notifications';
@@ -14,6 +16,7 @@ import { Profile } from '../Screens/Profile'; // Import Profile instead of Walle
 import { HeadMaintenance } from '../Screens/ServiceHead/HeadMaintenance';
 
 const Tab = createBottomTabNavigator();
+const { width } = Dimensions.get('window');
 
 type TabItem = {
     name: string;
@@ -44,52 +47,59 @@ const TabsConfig: TabItem[] = [
 ];
 
 const CustomTabBar = ({ state, descriptors, navigation }: any) => {
+    const insets = useSafeAreaInsets();
+    const tabWidth = width / TabsConfig.length;
+
     return (
-        <View style={styles.tabBar}>
-            {state.routes.map((route: any, index: number) => {
-                const { options } = descriptors[route.key];
-                const isFocused = state.index === index;
-                const tab: TabItem | undefined = options.tabData;
+        <View style={[styles.tabBarContainer, { paddingBottom: insets.bottom }]}>
+            <View style={styles.tabBar}>
+                {state.routes.map((route: any, index: number) => {
+                    const { options } = descriptors[route.key];
+                    const isFocused = state.index === index;
+                    const tab: TabItem | undefined = options.tabData;
 
-                if (!tab) return null;
+                    if (!tab) return null;
 
-                const onPress = () => {
-                    const event = navigation.emit({
-                        type: 'tabPress',
-                        target: route.key,
-                        canPreventDefault: true,
-                    });
+                    const onPress = () => {
+                        const event = navigation.emit({
+                            type: 'tabPress',
+                            target: route.key,
+                            canPreventDefault: true,
+                        });
 
-                    if (!isFocused && !event.defaultPrevented) {
-                        navigation.navigate(route.name);
-                    }
-                };
+                        if (!isFocused && !event.defaultPrevented) {
+                            navigation.navigate(route.name);
+                        }
+                    };
 
-                return (
-                    <TouchableOpacity
-                        key={route.key}
-                        onPress={onPress}
-                        style={styles.tabItem}
-                        activeOpacity={0.7}
-                    >
-                        <Icon
-                            name={isFocused ? tab.activeIconName : tab.iconName}
-                            size={26}
-                            color={isFocused ? '#0FA37F' : '#000'}
-                        />
-                        <Text
-                            style={{
-                                fontSize: 12,
-                                marginTop: 2,
-                                color: isFocused ? '#0FA37F' : '#000',
-                                fontWeight: isFocused ? '600' : '400',
-                            }}
+                    return (
+                        <TouchableOpacity
+                            key={route.key}
+                            onPress={onPress}
+                            style={[styles.tabItem, { width: tabWidth }]}
+                            activeOpacity={0.7}
                         >
-                            {tab.name}
-                        </Text>
-                    </TouchableOpacity>
-                );
-            })}
+                            <Icon
+                                name={isFocused ? tab.activeIconName : tab.iconName}
+                                size={24}
+                                color={isFocused ? '#0FA37F' : '#000'}
+                            />
+                            <Text
+                                style={[
+                                    styles.tabLabel,
+                                    {
+                                        color: isFocused ? '#0FA37F' : '#000',
+                                        fontWeight: isFocused ? '600' : '400',
+                                    }
+                                ]}
+                                numberOfLines={1}
+                            >
+                                {tab.name}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
         </View>
     );
 };
@@ -114,19 +124,27 @@ const HeadMainTabs = () => {
 };
 
 const styles = StyleSheet.create({
-    tabBar: {
-        flexDirection: 'row',
-        height: 70,
-        alignItems: 'center',
-        justifyContent: 'space-around',
+    tabBarContainer: {
         backgroundColor: '#fff',
         borderTopWidth: 0.5,
         borderTopColor: '#ddd',
     },
+    tabBar: {
+        flexDirection: 'row',
+        height: 70,
+        alignItems: 'center',
+        backgroundColor: '#fff',
+    },
     tabItem: {
-        flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
+        height: '100%',
+        paddingHorizontal: 5,
+    },
+    tabLabel: {
+        fontSize: 11,
+        marginTop: 4,
+        textAlign: 'center',
     },
 });
 
