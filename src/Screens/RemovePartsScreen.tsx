@@ -8,7 +8,11 @@ import {
     FlatList,
     Alert,
     ActivityIndicator,
-    SafeAreaView
+    SafeAreaView,
+    KeyboardAvoidingView,
+    Platform,
+    Keyboard,
+    Dimensions
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -50,6 +54,8 @@ interface RouteParams {
     onGoBack?: () => void;
 }
 
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 const RemovePartsScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
@@ -68,8 +74,30 @@ const RemovePartsScreen = () => {
 
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedParts, setSelectedParts] = useState<{ [key: number]: PartRemoval }>({});
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
 
     console.log("||||||||||||||||||||||||||", selectedParts)
+
+    // Keyboard listeners
+    useEffect(() => {
+        const keyboardDidShowListener = Keyboard.addListener(
+            'keyboardDidShow',
+            () => {
+                setKeyboardVisible(true);
+            }
+        );
+        const keyboardDidHideListener = Keyboard.addListener(
+            'keyboardDidHide',
+            () => {
+                setKeyboardVisible(false);
+            }
+        );
+
+        return () => {
+            keyboardDidShowListener.remove();
+            keyboardDidHideListener.remove();
+        };
+    }, []);
 
     // Debounced search function
     const debouncedSearch = useRef(
@@ -117,11 +145,13 @@ const RemovePartsScreen = () => {
                     [part.id]: {
                         part_id: part.id, // Store just the ID, not an array
                         maintenance_id: routeMaintenanceId,
-                        quantity: "1"
+                        quantity: ""
                     }
                 };
             }
         });
+        // Dismiss keyboard when part is selected
+        Keyboard.dismiss();
     }, [routeMaintenanceId]);
 
     const updateQuantity = useCallback((partId: number, quantity: string) => {
@@ -131,7 +161,7 @@ const RemovePartsScreen = () => {
             ...prev,
             [partId]: {
                 ...prev[partId],
-                quantity: numericQuantity || "1"
+                quantity: numericQuantity
             }
         }));
     }, []);
@@ -230,7 +260,12 @@ const RemovePartsScreen = () => {
             <View style={styles.stickyHeader}>
                 <Header />
             </View>
-            <View style={styles.container}>
+            
+            <KeyboardAvoidingView 
+                style={styles.container}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+            >
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                         <Icon name="arrow-back" size={24} color="#333" />
@@ -266,25 +301,32 @@ const RemovePartsScreen = () => {
                 {searchLoading ? (
                     <ActivityIndicator size="large" color="#dc3545" style={styles.loader} />
                 ) : (
-                    <FlatList
-                        data={searchedParts}
-                        keyExtractor={(item) => item.id.toString()}
-                        renderItem={renderPartItem}
-                        ListEmptyComponent={
-                            <View style={styles.emptyContainer}>
-                                <Icon name="inventory" size={50} color="#ccc" />
-                                <Text style={styles.emptyText}>
-                                    {searchQuery ? "No parts found" : "Search for parts to remove"}
-                                </Text>
-                                <Text style={styles.emptySubText}>
-                                    {searchQuery ? "Try a different search term" : "Enter part name or number to search"}
-                                </Text>
-                            </View>
-                        }
-                        initialNumToRender={10}
-                        maxToRenderPerBatch={10}
-                        windowSize={5}
-                    />
+                    <View style={[
+                        styles.listContainer,
+                        keyboardVisible && styles.listContainerWithKeyboard
+                    ]}>
+                        <FlatList
+                            data={searchedParts}
+                            keyExtractor={(item) => item.id.toString()}
+                            renderItem={renderPartItem}
+                            ListEmptyComponent={
+                                <View style={styles.emptyContainer}>
+                                    <Icon name="inventory" size={50} color="#ccc" />
+                                    <Text style={styles.emptyText}>
+                                        {searchQuery ? "No parts found" : "Search for parts to remove"}
+                                    </Text>
+                                    <Text style={styles.emptySubText}>
+                                        {searchQuery ? "Try a different search term" : "Enter part name or number to search"}
+                                    </Text>
+                                </View>
+                            }
+                            initialNumToRender={10}
+                            maxToRenderPerBatch={10}
+                            windowSize={5}
+                            keyboardShouldPersistTaps="handled"
+                            contentContainerStyle={searchedParts.length === 0 ? styles.emptyListContent : undefined}
+                        />
+                    </View>
                 )}
 
                 {totalSelectedParts > 0 && (
@@ -298,7 +340,7 @@ const RemovePartsScreen = () => {
                         </Text>
                     </TouchableOpacity>
                 )}
-            </View>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 };
@@ -314,12 +356,12 @@ const styles = StyleSheet.create({
     },
     stickyHeader: {
         padding: 16,
-
     },
     header: {
         flexDirection: "row",
         justifyContent: "space-between",
         alignItems: "center",
+        padding: 16
     },
     backButton: {
         padding: 5,
@@ -353,6 +395,7 @@ const styles = StyleSheet.create({
         flex: 1,
         padding: 12,
         fontSize: 16,
+        color: "#333",
     },
     searchInfo: {
         paddingHorizontal: 15,
@@ -361,6 +404,16 @@ const styles = StyleSheet.create({
     searchInfoText: {
         fontSize: 14,
         color: "#666",
+    },
+    listContainer: {
+        flex: 1,
+    },
+    listContainerWithKeyboard: {
+        flex: 0.7, // Reduce height when keyboard is visible to ensure content fits
+    },
+    emptyListContent: {
+        flexGrow: 1,
+        justifyContent: 'center',
     },
     loader: {
         marginTop: 50,
@@ -411,6 +464,7 @@ const styles = StyleSheet.create({
         borderRadius: 5,
         padding: 10,
         marginBottom: 15,
+        color: "#333",
     },
     emptyContainer: {
         alignItems: "center",

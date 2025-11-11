@@ -161,7 +161,7 @@ const PartsDetails = ({ navigation, route }: any) => {
         const selected = updatedParts.filter(part => part.isSelected && part.status === "requested");
         setSelectedParts(selected);
 
-        // Initialize quantity values for selected parts
+        // Initialize quantity values for selected parts with minimum 1
         const newQuantities = { ...approveQuantities };
         if (!item.isSelected) {
             newQuantities[item.id] = item.quantity.toString();
@@ -183,7 +183,7 @@ const PartsDetails = ({ navigation, route }: any) => {
             const response = await maintenanceApi.approvePartsRequest(approvalPayload);
 
             if (response.msg === "successful") {
-                // Update local state
+                // IMMEDIATE FRONTEND UPDATE - Real-time change
                 const updatedParts = partsData.map(part => {
                     if (part.isSelected) {
                         return {
@@ -211,15 +211,27 @@ const PartsDetails = ({ navigation, route }: any) => {
         }
     };
 
+    // FIXED: Quantity change with validation - minimum 1
     const handleQuantityChange = (partId: string, value: string) => {
-        // Only allow numbers and empty string
-        if (value === '' || /^\d+$/.test(value)) {
-            const part = partsData.find(p => p.id === partId);
-            const requestedQty = part?.quantity || 0;
-            const numericValue = parseInt(value) || 0;
-            
-            // Check if the value is within allowed range (1 to requested quantity)
-            if (numericValue >= 1 && numericValue <= requestedQty) {
+        // Allow empty for typing, but don't save empty values
+        if (value === '') {
+            const newQuantities = { ...approveQuantities };
+            delete newQuantities[partId];
+            setApproveQuantities(newQuantities);
+            return;
+        }
+
+        // Only allow numbers
+        if (/^\d+$/.test(value)) {
+            const numericValue = parseInt(value);
+
+            // Minimum 1 - jodi 0 or negative hoy, set to 1
+            if (numericValue < 1) {
+                setApproveQuantities({
+                    ...approveQuantities,
+                    [partId]: "1"
+                });
+            } else {
                 setApproveQuantities({
                     ...approveQuantities,
                     [partId]: value
@@ -228,22 +240,22 @@ const PartsDetails = ({ navigation, route }: any) => {
         }
     };
 
+    // FIXED: Increment - always at least 1
     const incrementQuantity = (partId: string) => {
-        const part = partsData.find(p => p.id === partId);
-        const requestedQty = part?.quantity || 0;
-        const currentQty = parseInt(approveQuantities[partId] || part?.quantity.toString() || "1");
-        
-        if (currentQty < requestedQty) {
-            setApproveQuantities({
-                ...approveQuantities,
-                [partId]: (currentQty + 1).toString()
-            });
-        }
+        const currentValue = approveQuantities[partId];
+        const currentQty = parseInt(currentValue) || 1;
+
+        setApproveQuantities({
+            ...approveQuantities,
+            [partId]: (currentQty + 1).toString()
+        });
     };
 
+    // FIXED: Decrement - never go below 1
     const decrementQuantity = (partId: string) => {
-        const currentQty = parseInt(approveQuantities[partId] || "1");
-        
+        const currentValue = approveQuantities[partId];
+        const currentQty = parseInt(currentValue) || 1;
+
         if (currentQty > 1) {
             setApproveQuantities({
                 ...approveQuantities,
@@ -251,6 +263,12 @@ const PartsDetails = ({ navigation, route }: any) => {
             });
         }
     };
+
+    // NEW: Check if all parts have valid quantities
+    const allPartsHaveValidQuantities = selectedParts.every(part => {
+        const quantity = approveQuantities[part.id];
+        return quantity && parseInt(quantity) > 0;
+    });
 
     const getStatusButtonStyle = (status: string) => {
         switch (status) {
@@ -490,27 +508,27 @@ const PartsDetails = ({ navigation, route }: any) => {
                                     <View style={styles.approveItemDetails}>
                                         <View style={styles.quantitySection}>
                                             <Text style={styles.quantityLabel}>Requested Quantity: {part.quantity}</Text>
-                                            
+
                                             <View style={styles.quantityControlContainer}>
                                                 <Text style={styles.approveQuantityLabel}>Approve Quantity:</Text>
-                                                
+
                                                 <View style={styles.quantityInputWrapper}>
-                                                    <TouchableOpacity 
+                                                    <TouchableOpacity
                                                         style={styles.quantityButton}
                                                         onPress={() => decrementQuantity(part.id)}
                                                     >
                                                         <Icon name="minus" size={16} color="#1A1D29" />
                                                     </TouchableOpacity>
-                                                    
+
                                                     <TextInput
                                                         style={styles.quantityInput}
-                                                        value={approveQuantities[part.id] || part.quantity.toString()}
+                                                        value={approveQuantities[part.id] || "1"}
                                                         onChangeText={(value) => handleQuantityChange(part.id, value)}
                                                         keyboardType="numeric"
                                                         textAlign="center"
                                                     />
-                                                    
-                                                    <TouchableOpacity 
+
+                                                    <TouchableOpacity
                                                         style={styles.quantityButton}
                                                         onPress={() => incrementQuantity(part.id)}
                                                     >
@@ -539,8 +557,9 @@ const PartsDetails = ({ navigation, route }: any) => {
                                 <Text style={styles.cancelButtonText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={styles.requestButton}
+                                style={[styles.requestButton, !allPartsHaveValidQuantities && styles.disabledButton]}
                                 onPress={handleApproveParts}
+                                disabled={!allPartsHaveValidQuantities}
                             >
                                 <Text style={styles.requestButtonText}>Approve Selected</Text>
                             </TouchableOpacity>
@@ -915,6 +934,10 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: "600",
         color: "#1A1D29",
+    },
+    disabledButton: {
+        backgroundColor: "#CCCCCC",
+        opacity: 0.6,
     },
 });
 

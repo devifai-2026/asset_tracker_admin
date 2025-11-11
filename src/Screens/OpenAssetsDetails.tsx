@@ -22,6 +22,7 @@ import {
   selectMaintenanceDetailError,
   clearCurrentDetail,
   acceptMaintenance,
+  fetchMaintenanceList,
 } from "../Redux/Slices/maintenanceSlice";
 import { Header } from "./Header";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
@@ -149,6 +150,13 @@ const OpenAssetsDetails = () => {
     }
   };
 
+
+  const handleRejectClick = () => {
+    // Show comment box when reject is clicked
+    setShowCommentBox(true);
+    setRejectPressed(true);
+  };
+
   const handleAccept = () => {
     if (!maintenanceDetail?.id) return;
 
@@ -159,17 +167,14 @@ const OpenAssetsDetails = () => {
     }) as any)
       .then(() => {
         Alert.alert("Accepted", "You have accepted this assignment.");
+
+        dispatch(fetchMaintenanceList() as any);
+
         navigation.goBack();
       })
       .catch(() => {
         Alert.alert("Error", "Failed to accept assignment.");
       });
-  };
-
-  const handleRejectClick = () => {
-    // Show comment box when reject is clicked
-    setShowCommentBox(true);
-    setRejectPressed(true);
   };
 
   const handleRejectConfirm = () => {
@@ -189,12 +194,15 @@ const OpenAssetsDetails = () => {
     setRejectPressed(false);
 
     dispatch(acceptMaintenance({
-      is_accepeted: false,
+      is_accepted: false,
       comment: comment,
       maintenance_id: maintenanceDetail.id
     }) as any)
       .then(() => {
         Alert.alert("Rejected", "You have rejected this assignment.");
+
+        dispatch(fetchMaintenanceList() as any);
+
         navigation.goBack();
       })
       .catch(() => {

@@ -10,7 +10,11 @@ import {
     ActivityIndicator,
     Modal,
     ScrollView,
-    SafeAreaView
+    SafeAreaView,
+    KeyboardAvoidingView,
+    Platform,
+    Dimensions,
+    Keyboard
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -65,6 +69,8 @@ interface RouteParams {
     onGoBack?: () => void;
 }
 
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
 const RequestPartsScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
@@ -75,8 +81,8 @@ const RequestPartsScreen = () => {
     const searchedParts = useSelector(selectSearchedParts);
     const searchLoading = useSelector(selectSearchLoading);
     const searchError = useSelector(selectSearchError);
-    const requestLoading = useSelector(selectRequestLoading);
     const requestError = useSelector(selectRequestError);
+    const requestLoading = useSelector(selectRequestLoading);
     const localPurchaseLoading = useSelector(selectLocalPurchaseLoading);
     const localPurchaseError = useSelector(selectLocalPurchaseError);
 
@@ -93,6 +99,28 @@ const RequestPartsScreen = () => {
             total_price: "0"
         }
     ]);
+    const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+    // Keyboard listeners
+    useEffect(() => {
+        const keyboardDidShowListener = Keyboard.addListener(
+            'keyboardDidShow',
+            () => {
+                setKeyboardVisible(true);
+            }
+        );
+        const keyboardDidHideListener = Keyboard.addListener(
+            'keyboardDidHide',
+            () => {
+                setKeyboardVisible(false);
+            }
+        );
+
+        return () => {
+            keyboardDidShowListener.remove();
+            keyboardDidHideListener.remove();
+        };
+    }, []);
 
     // Debounced search function
     const debouncedSearch = useRef(
@@ -136,6 +164,8 @@ const RequestPartsScreen = () => {
     const handleSearchSelect = (part: InventoryPart) => {
         setSearchQuery(part.part_no);
         togglePartSelection(part);
+        // Dismiss keyboard when part is selected
+        Keyboard.dismiss();
     };
 
     const togglePartSelection = useCallback((part: InventoryPart) => {
@@ -317,6 +347,7 @@ const RequestPartsScreen = () => {
                     <TextInput
                         style={styles.quantityInput}
                         placeholder="Quantity"
+                        placeholderTextColor="#999"
                         value={selectedParts[item.id].quantity}
                         onChangeText={(text) => updateQuantity(item.id, text)}
                         keyboardType="numeric"
@@ -332,7 +363,12 @@ const RequestPartsScreen = () => {
             <View style={styles.stickyHeader}>
                 <Header />
             </View>
-            <View style={styles.container}>
+            
+            <KeyboardAvoidingView 
+                style={styles.container}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
+            >
                 <View style={styles.header}>
                     <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
                         <Icon name="arrow-back" size={24} color="#333" />
@@ -354,6 +390,7 @@ const RequestPartsScreen = () => {
                         <TextInput
                             style={styles.searchInput}
                             placeholder="Search parts by name, number or description..."
+                            placeholderTextColor="#999"
                             value={searchQuery}
                             onChangeText={setSearchQuery}
                             autoFocus={true}
@@ -375,25 +412,32 @@ const RequestPartsScreen = () => {
                 {searchLoading ? (
                     <ActivityIndicator size="large" color="#0FA37F" style={styles.loader} />
                 ) : (
-                    <FlatList
-                        data={searchedParts}
-                        keyExtractor={(item) => item.id.toString()}
-                        renderItem={renderPartItem}
-                        ListEmptyComponent={
-                            <View style={styles.emptyContainer}>
-                                <Icon name="inventory" size={50} color="#ccc" />
-                                <Text style={styles.emptyText}>
-                                    {searchQuery ? "No parts found" : "Search for parts to request"}
-                                </Text>
-                                <Text style={styles.emptySubText}>
-                                    {searchQuery ? "Try a different search term" : "Enter part name or number to search"}
-                                </Text>
-                            </View>
-                        }
-                        initialNumToRender={10}
-                        maxToRenderPerBatch={10}
-                        windowSize={5}
-                    />
+                    <View style={[
+                        styles.listContainer,
+                        keyboardVisible && styles.listContainerWithKeyboard
+                    ]}>
+                        <FlatList
+                            data={searchedParts}
+                            keyExtractor={(item) => item.id.toString()}
+                            renderItem={renderPartItem}
+                            ListEmptyComponent={
+                                <View style={styles.emptyContainer}>
+                                    <Icon name="inventory" size={50} color="#ccc" />
+                                    <Text style={styles.emptyText}>
+                                        {searchQuery ? "No parts found" : "Search for parts to request"}
+                                    </Text>
+                                    <Text style={styles.emptySubText}>
+                                        {searchQuery ? "Try a different search term" : "Enter part name or number to search"}
+                                    </Text>
+                                </View>
+                            }
+                            initialNumToRender={10}
+                            maxToRenderPerBatch={10}
+                            windowSize={5}
+                            keyboardShouldPersistTaps="handled"
+                            contentContainerStyle={searchedParts?.length === 0 ? styles.emptyListContent : undefined}
+                        />
+                    </View>
                 )}
 
                 {(totalSelectedParts > 0) && (
@@ -415,115 +459,130 @@ const RequestPartsScreen = () => {
                     onRequestClose={() => setShowLocalPurchaseModal(false)}
                 >
                     <View style={styles.modalOverlay}>
-                        <View style={styles.modalContent}>
-                            <View style={styles.modalHeader}>
-                                <Text style={styles.modalTitle}>Local Purchase</Text>
-                                <TouchableOpacity
-                                    onPress={() => setShowLocalPurchaseModal(false)}
-                                    style={styles.modalCloseButton}
+                        <KeyboardAvoidingView 
+                            behavior={Platform.OS === "ios" ? "padding" : "height"}
+                            style={styles.keyboardAvoidingView}
+                        >
+                            <View style={styles.modalContent}>
+                                <View style={styles.modalHeader}>
+                                    <Text style={styles.modalTitle}>Local Purchase</Text>
+                                    <TouchableOpacity
+                                        onPress={() => setShowLocalPurchaseModal(false)}
+                                        style={styles.modalCloseButton}
+                                    >
+                                        <Icon name="close" size={24} color="#333" />
+                                    </TouchableOpacity>
+                                </View>
+
+                                <ScrollView 
+                                    style={styles.modalBody}
+                                    showsVerticalScrollIndicator={false}
+                                    contentContainerStyle={styles.modalBodyContent}
                                 >
-                                    <Icon name="close" size={24} color="#333" />
-                                </TouchableOpacity>
-                            </View>
+                                    {localPurchaseItems.map((item, index) => (
+                                        <View key={index} style={styles.localPurchaseItem}>
+                                            <View style={styles.itemHeader}>
+                                                <Text style={styles.itemTitle}>Item {index + 1}</Text>
+                                                {localPurchaseItems.length > 1 && (
+                                                    <TouchableOpacity
+                                                        onPress={() => removeLocalPurchaseItem(index)}
+                                                        style={styles.removeItemButton}
+                                                    >
+                                                        <Icon name="remove" size={20} color="#dc3545" />
+                                                    </TouchableOpacity>
+                                                )}
+                                            </View>
 
-                            <ScrollView style={styles.modalBody}>
-                                {localPurchaseItems.map((item, index) => (
-                                    <View key={index} style={styles.localPurchaseItem}>
-                                        <View style={styles.itemHeader}>
-                                            <Text style={styles.itemTitle}>Item {index + 1}</Text>
-                                            {localPurchaseItems.length > 1 && (
-                                                <TouchableOpacity
-                                                    onPress={() => removeLocalPurchaseItem(index)}
-                                                    style={styles.removeItemButton}
-                                                >
-                                                    <Icon name="remove" size={20} color="#dc3545" />
-                                                </TouchableOpacity>
-                                            )}
-                                        </View>
-
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="Part Number *"
-                                            value={item.part_no}
-                                            onChangeText={(text) => updateLocalPurchaseItem(index, 'part_no', text)}
-                                        />
-
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="Part Name *"
-                                            value={item.part_name}
-                                            onChangeText={(text) => updateLocalPurchaseItem(index, 'part_name', text)}
-                                        />
-
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="Part Description"
-                                            value={item.part_description}
-                                            onChangeText={(text) => updateLocalPurchaseItem(index, 'part_description', text)}
-                                            multiline
-                                        />
-
-                                        <View style={styles.rowInputs}>
                                             <TextInput
-                                                style={[styles.input, styles.smallInput]}
-                                                placeholder="Quantity *"
-                                                value={item.quantity}
-                                                onChangeText={(text) => updateLocalPurchaseItem(index, 'quantity', text)}
-                                                keyboardType="numeric"
+                                                style={styles.input}
+                                                placeholder="Part Number *"
+                                                placeholderTextColor="#999"
+                                                value={item.part_no}
+                                                onChangeText={(text) => updateLocalPurchaseItem(index, 'part_no', text)}
                                             />
+
                                             <TextInput
-                                                style={[styles.input, styles.smallInput]}
-                                                placeholder="Price/Unit (₹) *"
-                                                value={item.price_per_unit}
-                                                onChangeText={(text) => updateLocalPurchaseItem(index, 'price_per_unit', text)}
-                                                keyboardType="numeric"
+                                                style={styles.input}
+                                                placeholder="Part Name *"
+                                                placeholderTextColor="#999"
+                                                value={item.part_name}
+                                                onChangeText={(text) => updateLocalPurchaseItem(index, 'part_name', text)}
+                                            />
+
+                                            <TextInput
+                                                style={styles.input}
+                                                placeholder="Part Description"
+                                                placeholderTextColor="#999"
+                                                value={item.part_description}
+                                                onChangeText={(text) => updateLocalPurchaseItem(index, 'part_description', text)}
+                                                multiline
+                                            />
+
+                                            <View style={styles.rowInputs}>
+                                                <TextInput
+                                                    style={[styles.input, styles.smallInput]}
+                                                    placeholder="Quantity *"
+                                                    placeholderTextColor="#999"
+                                                    value={item.quantity}
+                                                    onChangeText={(text) => updateLocalPurchaseItem(index, 'quantity', text)}
+                                                    keyboardType="numeric"
+                                                />
+                                                <TextInput
+                                                    style={[styles.input, styles.smallInput]}
+                                                    placeholder="Price/Unit (₹) *"
+                                                    placeholderTextColor="#999"
+                                                    value={item.price_per_unit}
+                                                    onChangeText={(text) => updateLocalPurchaseItem(index, 'price_per_unit', text)}
+                                                    keyboardType="numeric"
+                                                />
+                                            </View>
+
+                                            <TextInput
+                                                style={styles.input}
+                                                placeholder="Total Price"
+                                                placeholderTextColor="#999"
+                                                value={`₹${item.total_price}`}
+                                                editable={false}
                                             />
                                         </View>
+                                    ))}
 
-                                        <TextInput
-                                            style={styles.input}
-                                            placeholder="Total Price"
-                                            value={`₹${item.total_price}`}
-                                            editable={false}
-                                        />
-                                    </View>
-                                ))}
+                                    <TouchableOpacity
+                                        onPress={addLocalPurchaseItem}
+                                        style={styles.addItemButton}
+                                    >
+                                        <Icon name="add" size={20} color="#0FA37F" />
+                                        <Text style={styles.addItemText}>Add Another Item</Text>
+                                    </TouchableOpacity>
+                                </ScrollView>
 
-                                <TouchableOpacity
-                                    onPress={addLocalPurchaseItem}
-                                    style={styles.addItemButton}
-                                >
-                                    <Icon name="add" size={20} color="#0FA37F" />
-                                    <Text style={styles.addItemText}>Add Another Item</Text>
-                                </TouchableOpacity>
-                            </ScrollView>
-
-                            <View style={styles.modalFooter}>
-                                <TouchableOpacity
-                                    style={[styles.modalButton, styles.cancelButton]}
-                                    onPress={() => setShowLocalPurchaseModal(false)}
-                                >
-                                    <Text style={styles.modalButtonText}>Cancel</Text>
-                                </TouchableOpacity>
-                                <TouchableOpacity
-                                    style={[styles.modalButton, styles.submitModalButton]}
-                                    onPress={submitLocalPurchase}
-                                    disabled={localPurchaseLoading}
-                                >
-                                    <Text style={styles.modalButtonText}>
-                                        {localPurchaseLoading ? "Processing..." : "Submit Purchase"}
-                                    </Text>
-                                </TouchableOpacity>
+                                <View style={styles.modalFooter}>
+                                    <TouchableOpacity
+                                        style={[styles.modalButton, styles.cancelButton]}
+                                        onPress={() => setShowLocalPurchaseModal(false)}
+                                    >
+                                        <Text style={styles.modalButtonText}>Cancel</Text>
+                                    </TouchableOpacity>
+                                    <TouchableOpacity
+                                        style={[styles.modalButton, styles.submitModalButton]}
+                                        onPress={submitLocalPurchase}
+                                        disabled={localPurchaseLoading}
+                                    >
+                                        <Text style={styles.modalButtonText}>
+                                            {localPurchaseLoading ? "Processing..." : "Submit Purchase"}
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
-                        </View>
+                        </KeyboardAvoidingView>
                     </View>
                 </Modal>
-            </View>
+            </KeyboardAvoidingView>
         </SafeAreaView>
     );
 };
 
-// Styles remain the same as your original file
+// Updated styles with fixes for keyboard issues
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
@@ -584,7 +643,8 @@ const styles = StyleSheet.create({
     searchInput: {
         flex: 1,
         padding: 12,
-        fontSize: 16
+        fontSize: 16,
+        color: "#333",
     },
     searchInfo: {
         paddingHorizontal: 15,
@@ -594,13 +654,24 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: "#666"
     },
+    listContainer: {
+        flex: 1,
+    },
+    listContainerWithKeyboard: {
+        flex: 0.7, // Reduce height when keyboard is visible to ensure content fits
+    },
+    emptyListContent: {
+        flexGrow: 1,
+        justifyContent: 'center',
+    },
     input: {
         backgroundColor: "#fff",
         margin: 10,
         padding: 12,
         borderRadius: 8,
         borderWidth: 1,
-        borderColor: "#ddd"
+        borderColor: "#ddd",
+        color: "#333",
     },
     loader: {
         marginTop: 50
@@ -650,7 +721,8 @@ const styles = StyleSheet.create({
         borderColor: "#ddd",
         borderRadius: 5,
         padding: 10,
-        marginBottom: 15
+        marginBottom: 15,
+        color: "#333",
     },
     emptyContainer: {
         alignItems: "center",
@@ -677,50 +749,22 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: "600"
     },
-    paginationContainer: {
-        flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
-        paddingHorizontal: 15,
-        paddingVertical: 10,
-        backgroundColor: "#fff",
-        borderBottomWidth: 1,
-        borderBottomColor: "#eee"
-    },
-    paginationButton: {
-        flexDirection: "row",
-        alignItems: "center",
-        padding: 8,
-        borderRadius: 5,
-        backgroundColor: "#f0f0f0"
-    },
-    paginationButtonDisabled: {
-        backgroundColor: "#f5f5f5"
-    },
-    paginationText: {
-        marginHorizontal: 5,
-        color: "#0FA37F",
-        fontWeight: "500"
-    },
-    paginationTextDisabled: {
-        color: "#ccc"
-    },
-    paginationInfo: {
-        fontSize: 14,
-        color: "#666",
-        fontWeight: "500"
-    },
     modalOverlay: {
         flex: 1,
         backgroundColor: "rgba(0, 0, 0, 0.5)",
         justifyContent: "center",
         alignItems: "center"
     },
+    keyboardAvoidingView: {
+        width: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
     modalContent: {
         backgroundColor: "#fff",
         borderRadius: 12,
         width: "90%",
-        maxHeight: "80%"
+        maxHeight: SCREEN_HEIGHT * 0.85,
     },
     modalHeader: {
         flexDirection: "row",
@@ -739,8 +783,10 @@ const styles = StyleSheet.create({
         padding: 5
     },
     modalBody: {
+        maxHeight: SCREEN_HEIGHT * 0.6,
+    },
+    modalBodyContent: {
         padding: 15,
-        maxHeight: 400
     },
     modalFooter: {
         flexDirection: "row",
