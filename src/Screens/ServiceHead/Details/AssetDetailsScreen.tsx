@@ -371,7 +371,6 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                             })}
                         </View>
 
-
                         {/* Attachments Section */}
                         {(maintenanceDetail?.photos && maintenanceDetail.photos.length > 0) && (
                             <View style={styles.section}>
@@ -504,7 +503,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                                                 <Text style={styles.commentAuthor}>
                                                                     {rejectComment.name || "Unknown User"}
                                                                 </Text>
-                                                                {/* <View style={styles.statusContainer}>
+                                                                <View style={styles.statusContainer}>
                                                                     <Icon
                                                                         name={statusInfo.icon}
                                                                         size={16}
@@ -513,7 +512,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                                                     <Text style={[styles.statusText, { color: statusInfo.color }]}>
                                                                         {statusInfo.text}
                                                                     </Text>
-                                                                </View> */}
+                                                                </View>
                                                             </View>
                                                         </View>
                                                     </View>
@@ -534,33 +533,34 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
 
                         {/* Engineer Wallet Section */}
                         <View style={styles.section}>
-
                             {/* Display service persons from API */}
-                            {maintenanceDetail?.serviceSalePersons?.map((person, index) => (
-                                <View key={index} style={styles.engineerInfo}>
-                                    <Text style={styles.engineerName}>
-                                        {person.name}
-                                        {/* <Text style={styles.pendingText}>(pending)</Text> */}
-                                    </Text>
-
-                                    <View style={styles.buttonContainer}>
-
-
-                                        {/* Wallet Button */}
-                                        <TouchableOpacity
-                                            style={styles.walletButton}
-                                            onPress={() => navigation.navigate("WalletScreen", {
-                                                engineerId: person.id,
-                                                engineerName: person.name,
-                                                walletData: person.wallet
-                                            })}
-                                        >
-                                            <Text style={styles.buttonText}>Wallet</Text>
-                                            <Icon name="wallet-outline" size={16} color="#666" />
-                                        </TouchableOpacity>
+                            {maintenanceDetail?.serviceSalePersons?.length > 0 ? (
+                                maintenanceDetail.serviceSalePersons.map((person, index) => (
+                                    <View key={index} style={styles.engineerInfo}>
+                                        <Text style={styles.engineerName}>
+                                            {person.name}
+                                        </Text>
+                                        <View style={styles.buttonContainer}>
+                                            {/* Wallet Button */}
+                                            <TouchableOpacity
+                                                style={styles.walletButton}
+                                                onPress={() => navigation.navigate("WalletScreen", {
+                                                    engineerId: person.id,
+                                                    engineerName: person.name,
+                                                    walletData: person.wallet
+                                                })}
+                                            >
+                                                <Text style={styles.buttonText}>Wallet</Text>
+                                                <Icon name="wallet-outline" size={16} color="#666" />
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
+                                ))
+                            ) : (
+                                <View style={styles.emptyContainer}>
+                                    <Text style={styles.emptyText}>No service persons assigned</Text>
                                 </View>
-                            ))}
+                            )}
                         </View>
 
                         {/* Parts Details Section */}
@@ -1184,7 +1184,23 @@ const styles = StyleSheet.create({
         flexShrink: 0, // Added to prevent status from shrinking
         marginLeft: 8, // Added spacing
     },
-
+   emptyContainer: {
+        padding: 32,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#fafbfc',
+        borderRadius: 16,
+        borderWidth: 2,
+        borderColor: '#edf2f7',
+        borderStyle: 'dashed',
+    },
+    emptyText: {
+        fontSize: 15,
+        color: '#718096',
+        textAlign: 'center',
+        fontWeight: '500',
+        lineHeight: 22,
+    },
 });
 
 export default AssetDetailsScreen;
