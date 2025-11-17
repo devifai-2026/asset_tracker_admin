@@ -32,13 +32,13 @@ const { height } = Dimensions.get('window');
 
 // Install Part API Function
 const installPart = async (installData: any[]): Promise<any> => {
-  try {
-    const response = await authClient.post(APIEndpoints.installPart, installData);
-    return response.data;
-  } catch (error) {
-    console.error('Install part error:', error);
-    throw error;
-  }
+    try {
+        const response = await authClient.post(APIEndpoints.installPart, installData);
+        return response.data;
+    } catch (error) {
+        console.error('Install part error:', error);
+        throw error;
+    }
 };
 
 const SePartsDetails = () => {
@@ -105,10 +105,10 @@ const SePartsDetails = () => {
 
     // Helper function to check if part can be selected for installation
     const canSelectPartForInstallation = (part: WalletPart) => {
-        return part.is_approved && 
-               !part.is_removal_part && 
-               !isPartInstalled(part) &&
-               part.approve_quantity > 0;
+        return part.is_approved &&
+            !part.is_removal_part &&
+            !isPartInstalled(part) &&
+            part.approve_quantity > 0;
     };
 
     const togglePartSelection = (part: WalletPart) => {
@@ -121,7 +121,7 @@ const SePartsDetails = () => {
             setSelectedParts([...selectedParts, part]);
             setQuantityInputs({
                 ...quantityInputs,
-                [part.id]: part.approve_quantity.toString()
+                [part.id]: "1" // Start with minimum quantity of 1 instead of approved quantity
             });
         }
     };
@@ -129,9 +129,29 @@ const SePartsDetails = () => {
     const handleQuantityChange = (partId: number, value: string) => {
         // Allow only numbers
         const numericValue = value.replace(/[^0-9]/g, '');
+
+        // If empty, set to minimum 1
+        if (numericValue === '') {
+            setQuantityInputs({
+                ...quantityInputs,
+                [partId]: "1"
+            });
+            return;
+        }
+
+        const quantity = parseInt(numericValue);
+        const part = selectedParts.find(p => p.id === partId);
+        const maxQuantity = part?.approve_quantity || 1;
+
+        // Ensure quantity is at least 1
+        const validatedQuantity = Math.max(1, quantity);
+
+        // Ensure quantity doesn't exceed approved quantity
+        const finalQuantity = Math.min(validatedQuantity, maxQuantity);
+
         setQuantityInputs({
             ...quantityInputs,
-            [partId]: numericValue
+            [partId]: finalQuantity.toString()
         });
     };
 
@@ -158,23 +178,23 @@ const SePartsDetails = () => {
         }));
 
         console.log("Install data:", installData);
-        
+
         setInstalling(true);
         try {
             // Call the installPart API directly
             await installPart(installData);
-            
+
             Alert.alert("Success", "Parts installed successfully!");
             closeInstallDrawer();
             setSelectedParts([]);
             setQuantityInputs({});
-            
+
             // Refresh data after installation
             loadData();
         } catch (error: any) {
             console.error("Installation error:", error);
             Alert.alert(
-                "Error", 
+                "Error",
                 error.response?.data?.message || "Failed to install parts. Please try again."
             );
         } finally {
@@ -304,7 +324,7 @@ const SePartsDetails = () => {
             <View style={styles.stickyHeader}>
                 <Header />
             </View>
-            
+
             {/* Main Content */}
             <View style={styles.container}>
                 {/* Header */}
@@ -542,22 +562,60 @@ const SePartsDetails = () => {
                         <FlatList
                             data={selectedParts}
                             keyExtractor={(item) => item.id.toString()}
-                            renderItem={({ item }) => (
-                                <View style={styles.drawerPartItem}>
-                                    <View style={styles.drawerPartInfo}>
-                                        <Text style={styles.drawerPartNo}>{item.part_no}</Text>
-                                        <Text style={styles.drawerApprovedQty}>Approved: {item.approve_quantity}</Text>
+                            renderItem={({ item }) => {
+                                const currentQuantity = parseInt(quantityInputs[item.id] || "1");
+                                const maxQuantity = item.approve_quantity;
+
+                                return (
+                                    <View style={styles.drawerPartItem}>
+                                        <View style={styles.drawerPartInfo}>
+                                            <Text style={styles.drawerPartNo}>{item.part_no}</Text>
+                                            <Text style={styles.drawerApprovedQty}>Approved: {maxQuantity}</Text>
+                                        </View>
+
+                                        <View style={styles.quantityContainer}>
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.quantityButton,
+                                                    currentQuantity <= 1 && styles.quantityButtonDisabled
+                                                ]}
+                                                onPress={() => {
+                                                    if (currentQuantity > 1) {
+                                                        handleQuantityChange(item.id, (currentQuantity - 1).toString());
+                                                    }
+                                                }}
+                                                disabled={currentQuantity <= 1}
+                                            >
+                                                <Icon name="remove" size={16} color={currentQuantity <= 1 ? "#ccc" : "#333"} />
+                                            </TouchableOpacity>
+
+                                            <TextInput
+                                                style={styles.quantityInput}
+                                                value={quantityInputs[item.id] || "1"}
+                                                onChangeText={(text) => handleQuantityChange(item.id, text)}
+                                                keyboardType="numeric"
+                                                placeholder="Qty"
+                                                maxLength={5}
+                                            />
+
+                                            <TouchableOpacity
+                                                style={[
+                                                    styles.quantityButton,
+                                                    currentQuantity >= maxQuantity && styles.quantityButtonDisabled
+                                                ]}
+                                                onPress={() => {
+                                                    if (currentQuantity < maxQuantity) {
+                                                        handleQuantityChange(item.id, (currentQuantity + 1).toString());
+                                                    }
+                                                }}
+                                                disabled={currentQuantity >= maxQuantity}
+                                            >
+                                                <Icon name="add" size={16} color={currentQuantity >= maxQuantity ? "#ccc" : "#333"} />
+                                            </TouchableOpacity>
+                                        </View>
                                     </View>
-                                    <TextInput
-                                        style={styles.quantityInput}
-                                        value={quantityInputs[item.id] || ""}
-                                        onChangeText={(text) => handleQuantityChange(item.id, text)}
-                                        keyboardType="numeric"
-                                        placeholder="Qty"
-                                        maxLength={5}
-                                    />
-                                </View>
-                            )}
+                                );
+                            }}
                         />
 
                         <View style={styles.drawerButtons}>
@@ -888,15 +946,6 @@ const styles = StyleSheet.create({
         color: "#666",
         marginTop: 2,
     },
-    quantityInput: {
-        borderWidth: 1,
-        borderColor: "#ddd",
-        borderRadius: 5,
-        padding: 8,
-        width: 80,
-        textAlign: "center",
-        fontSize: 16,
-    },
     drawerButtons: {
         flexDirection: "row",
         justifyContent: "space-between",
@@ -920,6 +969,34 @@ const styles = StyleSheet.create({
     drawerButtonText: {
         color: "#fff",
         fontWeight: "600",
+    },
+
+    quantityContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    quantityButton: {
+        width: 32,
+        height: 32,
+        justifyContent: "center",
+        alignItems: "center",
+        borderWidth: 1,
+        borderColor: "#ddd",
+        backgroundColor: "#f8f8f8",
+    },
+    quantityButtonDisabled: {
+        backgroundColor: "#f0f0f0",
+        borderColor: "#eee",
+    },
+    quantityInput: {
+        borderWidth: 1,
+        borderColor: "#ddd",
+        borderRadius: 0,
+        padding: 8,
+        width: 60,
+        textAlign: "center",
+        fontSize: 16,
+        marginHorizontal: 5,
     },
 });
 

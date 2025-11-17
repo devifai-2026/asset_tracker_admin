@@ -15,7 +15,9 @@ import {
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { Header } from "../Header";
 import { maintenanceApi } from "../../api/maintenanceApi";
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
+import { fetchMaintenanceDetailNew } from "../../Redux/Slices/maintenanceSlice";
+import { useDispatch } from "react-redux";
 
 const PartsDetails = ({ navigation, route }: any) => {
     const [searchText, setSearchText] = useState("");
@@ -28,6 +30,8 @@ const PartsDetails = ({ navigation, route }: any) => {
     const [statusFilter, setStatusFilter] = useState("all");
     const [approveQuantities, setApproveQuantities] = useState<{ [key: string]: string }>({});
     const [refreshing, setRefreshing] = useState(false);
+    const isFocused = useIsFocused();
+
 
     // Get serviceSalePersons data from navigation params
     const { serviceSalePersons } = route.params || [];
@@ -35,16 +39,14 @@ const PartsDetails = ({ navigation, route }: any) => {
     // Convert data to the format expected by the component
     const [partsData, setPartsData] = useState<any[]>([]);
     const [engineersData, setEngineersData] = useState<any[]>([]);
+    const dispatch = useDispatch();
 
+    // Get maintenanceId from route params
+    const { maintenanceId } = route.params || {};
     // Function to load parts data
     const loadPartsData = useCallback(() => {
         console.log("Loading parts data...");
         if (serviceSalePersons && serviceSalePersons.length > 0) {
-            // Get maintenanceId from route params
-            const { maintenanceId } = route.params || {};
-
-            console.log("Maintenance ID from params:", maintenanceId);
-
             // Prepare engineers data for tabs
             const engineers = serviceSalePersons.map((person: any) => ({
                 id: person.id.toString(),
@@ -92,9 +94,12 @@ const PartsDetails = ({ navigation, route }: any) => {
     // Refresh when screen comes into focus
     useFocusEffect(
         useCallback(() => {
-            loadPartsData();
-        }, [loadPartsData])
+            if (isFocused) {
+                loadPartsData();
+            }
+        }, [isFocused, loadPartsData])
     );
+
 
     // Refresh function for manual refresh
     const refreshPartsData = () => {
@@ -183,6 +188,9 @@ const PartsDetails = ({ navigation, route }: any) => {
             const response = await maintenanceApi.approvePartsRequest(approvalPayload);
 
             if (response.msg === "successful") {
+                if (maintenanceId) {
+                    dispatch(fetchMaintenanceDetailNew(maintenanceId) as any);
+                }
                 // IMMEDIATE FRONTEND UPDATE - Real-time change
                 const updatedParts = partsData.map(part => {
                     if (part.isSelected) {
@@ -196,11 +204,13 @@ const PartsDetails = ({ navigation, route }: any) => {
                     return part;
                 });
 
+
+
                 setPartsData(updatedParts);
                 setSelectedParts([]);
                 setApproveQuantities({});
                 setShowApproveDrawer(false);
-
+                navigation.goBack();
                 Alert.alert("Success", "Parts approved successfully");
             } else {
                 Alert.alert("Error", "Failed to approve parts");
@@ -211,7 +221,7 @@ const PartsDetails = ({ navigation, route }: any) => {
         }
     };
 
-    // FIXED: Quantity change with validation - minimum 1
+    // FIXED: Quantity change with validation - minimum 1 and maximum requested quantity
     const handleQuantityChange = (partId: string, value: string) => {
         // Allow empty for typing, but don't save empty values
         if (value === '') {
@@ -224,6 +234,8 @@ const PartsDetails = ({ navigation, route }: any) => {
         // Only allow numbers
         if (/^\d+$/.test(value)) {
             const numericValue = parseInt(value);
+            const part = selectedParts.find(p => p.id === partId);
+            const requestedQty = part?.quantity || 1;
 
             // Minimum 1 - jodi 0 or negative hoy, set to 1
             if (numericValue < 1) {
@@ -231,7 +243,15 @@ const PartsDetails = ({ navigation, route }: any) => {
                     ...approveQuantities,
                     [partId]: "1"
                 });
-            } else {
+            }
+            // Maximum requested quantity - jodi besi hoy, set to requested quantity
+            else if (numericValue > requestedQty) {
+                setApproveQuantities({
+                    ...approveQuantities,
+                    [partId]: requestedQty.toString()
+                });
+            }
+            else {
                 setApproveQuantities({
                     ...approveQuantities,
                     [partId]: value
@@ -240,15 +260,19 @@ const PartsDetails = ({ navigation, route }: any) => {
         }
     };
 
-    // FIXED: Increment - always at least 1
+    // FIXED: Increment - never exceed requested quantity
     const incrementQuantity = (partId: string) => {
         const currentValue = approveQuantities[partId];
         const currentQty = parseInt(currentValue) || 1;
+        const part = selectedParts.find(p => p.id === partId);
+        const requestedQty = part?.quantity || 1;
 
-        setApproveQuantities({
-            ...approveQuantities,
-            [partId]: (currentQty + 1).toString()
-        });
+        if (currentQty < requestedQty) {
+            setApproveQuantities({
+                ...approveQuantities,
+                [partId]: (currentQty + 1).toString()
+            });
+        }
     };
 
     // FIXED: Decrement - never go below 1

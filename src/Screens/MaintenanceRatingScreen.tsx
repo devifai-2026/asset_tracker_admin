@@ -8,7 +8,7 @@ import {
     StyleSheet,
     ActivityIndicator,
     Alert,
-    SafeAreaView, // Add this import
+    SafeAreaView,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { useDispatch, useSelector } from "react-redux";
@@ -25,6 +25,7 @@ interface RatingCategory {
     percentage: number;
     sub_value: any[];
     titel: string;
+    type?: string;
 }
 
 interface RatingData {
@@ -35,7 +36,15 @@ interface RatingData {
         id: number;
         percentage: number;
         rating?: number;
+        titel?: string;
     }>;
+}
+
+interface ApiResponse {
+    "DC Machine"?: RatingCategory[];
+    "DC Machine Preventive"?: RatingCategory[];
+    "IC Machine"?: RatingCategory[];
+    "IC Machine Preventive"?: RatingCategory[];
 }
 
 const ITEMS_PER_PAGE = 5;
@@ -58,13 +67,52 @@ const MaintenanceRatingScreen = () => {
     }, []);
 
     useEffect(() => {
-        if (allCategories.length > 0 && types) {
+        if (allCategories.length > 0) {
             filterCategoriesByType();
         }
     }, [allCategories, types]);
 
+    const fetchRatingCategories = async () => {
+        try {
+            setLoading(true);
+            const isPreventive = types === "preventive_maintenance";
+            const endpoint = `/sale-service/get-maintenance-pmc-rate?s=1&preventive=${isPreventive ? 1 : 0}`;
+
+            const response = await authClient.get(endpoint);
+            const data: ApiResponse = response.data || {};
+
+            // Extract categories from API response
+            let categories: RatingCategory[] = [];
+
+            if (isPreventive) {
+                // For preventive maintenance
+                if (data["DC Machine Preventive"]) {
+                    categories = [...categories, ...data["DC Machine Preventive"]];
+                }
+                if (data["IC Machine Preventive"]) {
+                    categories = [...categories, ...data["IC Machine Preventive"]];
+                }
+            } else {
+                // For non-preventive maintenance
+                if (data["DC Machine"]) {
+                    categories = [...categories, ...data["DC Machine"]];
+                }
+                if (data["IC Machine"]) {
+                    categories = [...categories, ...data["IC Machine"]];
+                }
+            }
+
+            setAllCategories(categories);
+        } catch (error) {
+            console.error("Failed to fetch rating categories:", error);
+            Alert.alert("Error", "Failed to load rating categories");
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const filterCategoriesByType = () => {
-        let filtered = [];
+        let filtered: RatingCategory[] = [];
 
         if (types === "preventive_maintenance") {
             // Show only categories with sub_value (non-empty arrays)
@@ -92,25 +140,13 @@ const MaintenanceRatingScreen = () => {
                 ratingData.sub_value = category.sub_value.map((sub: any) => ({
                     id: sub.id,
                     percentage: sub.percentage,
+                    titel: sub.titel,
                 }));
             }
 
             return ratingData;
         });
         setRatings(initialRatings);
-    };
-
-    const fetchRatingCategories = async () => {
-        try {
-            setLoading(true);
-            const response = await authClient.get("/sale-service/get-maintenance-pmc-rate");
-            setAllCategories(response.data || []);
-        } catch (error) {
-            console.error("Failed to fetch rating categories:", error);
-            Alert.alert("Error", "Failed to load rating categories");
-        } finally {
-            setLoading(false);
-        }
     };
 
     const setCategoryRating = (categoryId: number, rating: number) => {
@@ -168,7 +204,6 @@ const MaintenanceRatingScreen = () => {
         return totalPercentage > 0 ? totalWeightedScore / totalPercentage : 0;
     };
 
-    // MaintenanceRatingScreen.tsx - handleSubmit function update
     const handleSubmit = async () => {
         // Check if all categories are rated
         const allRated = ratings.every(category => {
@@ -186,14 +221,30 @@ const MaintenanceRatingScreen = () => {
         try {
             setSubmitting(true);
 
-            // Prepare payload - remove empty sub_value arrays for non-preventive maintenance
+            // Prepare payload - Clean up the data structure
             const payloadData = ratings.map(category => {
-                // For non-preventive maintenance, don't include sub_value if it's empty
-                if (!category.sub_value || category.sub_value.length === 0) {
-                    const { sub_value, ...rest } = category;
-                    return rest;
+                // For categories with sub_values, clean the sub_value objects
+                if (category.sub_value && category.sub_value.length > 0) {
+                    const cleanedSubValues = category.sub_value.map(sub => ({
+                        id: sub.id,
+                        percentage: sub.percentage,
+                        rating: sub.rating
+                        // Remove titel field
+                    }));
+
+                    return {
+                        id: category.id,
+                        percentage: category.percentage,
+                        sub_value: cleanedSubValues
+                    };
+                } else {
+                    // For categories without sub_values
+                    return {
+                        id: category.id,
+                        percentage: category.percentage,
+                        rating: category.rating
+                    };
                 }
-                return category;
             });
 
             const payload = {
@@ -202,14 +253,17 @@ const MaintenanceRatingScreen = () => {
                 rating_data: payloadData,
             };
 
-            const response = await authClient.post("/sale-service/set-as-complete", payload);
+            console.log("Final Payload:", JSON.stringify(payload, null, 2));
+
+            const response = await authClient.post("/sale-service/set-as-complete-pmc", payload);
+
+            console.log("API Response:", response);
 
             if (response.data.types === "successful") {
                 Alert.alert("Success", response.data.msg || "Maintenance task marked as complete", [
                     {
                         text: "OK",
                         onPress: () => {
-                            // Instead of goBack, we'll navigate back and refresh the previous screen
                             navigation.goBack();
                         }
                     }
@@ -300,9 +354,7 @@ const MaintenanceRatingScreen = () => {
                 {currentCategories.map(category => (
                     <View key={category.id} style={styles.card}>
                         <Text style={styles.categoryTitle}>{category.titel}</Text>
-                        {/* <Text style={styles.categoryWeight}>Weight: {category.percentage}%</Text>
-
-                        <Text style={styles.ratingPrompt}>Select an overall rating for this section:</Text> */}
+                        {/* <Text style={styles.categoryWeight}>Weight: {category.percentage}%</Text> */}
 
                         {category.sub_value && category.sub_value.length > 0 ? (
                             // Preventive maintenance with sub categories
@@ -336,27 +388,30 @@ const MaintenanceRatingScreen = () => {
                             ))
                         ) : (
                             // Non-preventive maintenance - direct rating
-                            <View style={styles.ratingOptions}>
-                                {[0, 2.5, 5].map(rating => (
-                                    <TouchableOpacity
-                                        key={rating}
-                                        style={[
-                                            styles.ratingOption,
-                                            getCategoryRating(category.id) === rating &&
-                                            getRatingStyle(rating)
-                                        ]}
-                                        onPress={() => setCategoryRating(category.id, rating)}
-                                    >
-                                        <Text style={[
-                                            styles.ratingOptionText,
-                                            getCategoryRating(category.id) === rating &&
-                                            styles.ratingOptionTextSelected
-                                        ]}>
-                                            {getRatingLabel(rating)}
-                                        </Text>
-                                    </TouchableOpacity>
-                                ))}
-                            </View>
+                            <>
+                                <Text style={styles.ratingPrompt}>Select an overall rating for this section:</Text>
+                                <View style={styles.ratingOptions}>
+                                    {[0, 2.5, 5].map(rating => (
+                                        <TouchableOpacity
+                                            key={rating}
+                                            style={[
+                                                styles.ratingOption,
+                                                getCategoryRating(category.id) === rating &&
+                                                getRatingStyle(rating)
+                                            ]}
+                                            onPress={() => setCategoryRating(category.id, rating)}
+                                        >
+                                            <Text style={[
+                                                styles.ratingOptionText,
+                                                getCategoryRating(category.id) === rating &&
+                                                styles.ratingOptionTextSelected
+                                            ]}>
+                                                {getRatingLabel(rating)}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </>
                         )}
                     </View>
                 ))}

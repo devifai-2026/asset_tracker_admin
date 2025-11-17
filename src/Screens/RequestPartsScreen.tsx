@@ -263,7 +263,7 @@ const RequestPartsScreen = () => {
     // Update the submitLocalPurchase function to call onGoBack after success
     const submitLocalPurchase = async () => {
         for (const item of localPurchaseItems) {
-            if (!item.part_no.trim() || !item.part_name.trim() || !item.quantity.trim() || !item.price_per_unit.trim()) {
+            if (!item.part_no.trim() || !item.quantity.trim() || !item.price_per_unit.trim()) {
                 Alert.alert("Error", "Please fill all required fields for local purchase items");
                 return;
             }
@@ -273,8 +273,8 @@ const RequestPartsScreen = () => {
             for (const item of localPurchaseItems) {
                 const localPurchaseData = {
                     part_no: item.part_no,
-                    part_name: item.part_name,
-                    part_description: item.part_description || "",
+                    part_name: item.part_no, // Using part_no as part_name since we removed part_name field
+                    part_description: "", // Empty since description removed
                     quantity: parseInt(item.quantity) || 0,
                     price: parseFloat(item.price_per_unit) || 0,
                     maintenance_id: routeMaintenanceId,
@@ -301,7 +301,6 @@ const RequestPartsScreen = () => {
             }]);
             setShowLocalPurchaseModal(false);
 
-            // Call the callback to refresh data in parent
             if (onGoBack) {
                 onGoBack();
             }
@@ -363,8 +362,8 @@ const RequestPartsScreen = () => {
             <View style={styles.stickyHeader}>
                 <Header />
             </View>
-            
-            <KeyboardAvoidingView 
+
+            <KeyboardAvoidingView
                 style={styles.container}
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
                 keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
@@ -400,8 +399,8 @@ const RequestPartsScreen = () => {
                     {searchQuery && (
                         <View style={styles.searchInfo}>
                             <Text style={styles.searchInfoText}>
-                                {searchLoading ? 
-                                    "Searching..." : 
+                                {searchLoading ?
+                                    "Searching..." :
                                     `Found ${searchedParts.length} results for "${searchQuery}"`
                                 }
                             </Text>
@@ -459,7 +458,7 @@ const RequestPartsScreen = () => {
                     onRequestClose={() => setShowLocalPurchaseModal(false)}
                 >
                     <View style={styles.modalOverlay}>
-                        <KeyboardAvoidingView 
+                        <KeyboardAvoidingView
                             behavior={Platform.OS === "ios" ? "padding" : "height"}
                             style={styles.keyboardAvoidingView}
                         >
@@ -474,7 +473,7 @@ const RequestPartsScreen = () => {
                                     </TouchableOpacity>
                                 </View>
 
-                                <ScrollView 
+                                <ScrollView
                                     style={styles.modalBody}
                                     showsVerticalScrollIndicator={false}
                                     contentContainerStyle={styles.modalBodyContent}
@@ -493,54 +492,47 @@ const RequestPartsScreen = () => {
                                                 )}
                                             </View>
 
+                                            {/* Part Number */}
+                                            <Text style={styles.inputLabel}>Part No/Name *</Text>
                                             <TextInput
                                                 style={styles.input}
-                                                placeholder="Part Number *"
+                                                placeholder="Enter part number"
                                                 placeholderTextColor="#999"
                                                 value={item.part_no}
                                                 onChangeText={(text) => updateLocalPurchaseItem(index, 'part_no', text)}
                                             />
 
-                                            <TextInput
-                                                style={styles.input}
-                                                placeholder="Part Name *"
-                                                placeholderTextColor="#999"
-                                                value={item.part_name}
-                                                onChangeText={(text) => updateLocalPurchaseItem(index, 'part_name', text)}
-                                            />
-
-                                            <TextInput
-                                                style={styles.input}
-                                                placeholder="Part Description"
-                                                placeholderTextColor="#999"
-                                                value={item.part_description}
-                                                onChangeText={(text) => updateLocalPurchaseItem(index, 'part_description', text)}
-                                                multiline
-                                            />
-
+                                            {/* Quantity and Price Row */}
                                             <View style={styles.rowInputs}>
-                                                <TextInput
-                                                    style={[styles.input, styles.smallInput]}
-                                                    placeholder="Quantity *"
-                                                    placeholderTextColor="#999"
-                                                    value={item.quantity}
-                                                    onChangeText={(text) => updateLocalPurchaseItem(index, 'quantity', text)}
-                                                    keyboardType="numeric"
-                                                />
-                                                <TextInput
-                                                    style={[styles.input, styles.smallInput]}
-                                                    placeholder="Price/Unit (₹) *"
-                                                    placeholderTextColor="#999"
-                                                    value={item.price_per_unit}
-                                                    onChangeText={(text) => updateLocalPurchaseItem(index, 'price_per_unit', text)}
-                                                    keyboardType="numeric"
-                                                />
+                                                <View style={styles.columnInput}>
+                                                    <Text style={styles.inputLabel}>Quantity *</Text>
+                                                    <TextInput
+                                                        style={styles.input}
+                                                        placeholder="Enter quantity"
+                                                        placeholderTextColor="#999"
+                                                        value={item.quantity}
+                                                        onChangeText={(text) => updateLocalPurchaseItem(index, 'quantity', text)}
+                                                        keyboardType="numeric"
+                                                    />
+                                                </View>
+
+                                                <View style={styles.columnInput}>
+                                                    <Text style={styles.inputLabel}>Price/Unit (₹) *</Text>
+                                                    <TextInput
+                                                        style={styles.input}
+                                                        placeholder="Enter price"
+                                                        placeholderTextColor="#999"
+                                                        value={item.price_per_unit}
+                                                        onChangeText={(text) => updateLocalPurchaseItem(index, 'price_per_unit', text)}
+                                                        keyboardType="numeric"
+                                                    />
+                                                </View>
                                             </View>
 
+                                            {/* Total Price (Read-only) */}
+                                            <Text style={styles.inputLabel}>Total Price</Text>
                                             <TextInput
-                                                style={styles.input}
-                                                placeholder="Total Price"
-                                                placeholderTextColor="#999"
+                                                style={[styles.input, styles.disabledInput]}
                                                 value={`₹${item.total_price}`}
                                                 editable={false}
                                             />
@@ -664,15 +656,7 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         justifyContent: 'center',
     },
-    input: {
-        backgroundColor: "#fff",
-        margin: 10,
-        padding: 12,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: "#ddd",
-        color: "#333",
-    },
+   
     loader: {
         marginTop: 50
     },
@@ -764,7 +748,7 @@ const styles = StyleSheet.create({
         backgroundColor: "#fff",
         borderRadius: 12,
         width: "90%",
-        maxHeight: SCREEN_HEIGHT * 0.85,
+        maxHeight: SCREEN_HEIGHT * 0.75, // Reduced height
     },
     modalHeader: {
         flexDirection: "row",
@@ -782,8 +766,8 @@ const styles = StyleSheet.create({
     modalCloseButton: {
         padding: 5
     },
-    modalBody: {
-        maxHeight: SCREEN_HEIGHT * 0.6,
+     modalBody: {
+        maxHeight: SCREEN_HEIGHT * 0.5, // Reduced height
     },
     modalBodyContent: {
         padding: 15,
@@ -811,12 +795,44 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontWeight: "600"
     },
-    localPurchaseItem: {
-        marginBottom: 15,
-        padding: 10,
+     localPurchaseItem: {
+        marginBottom: 20,
+        padding: 15,
         borderWidth: 1,
-        borderColor: "#eee",
-        borderRadius: 8
+        borderColor: "#e0e0e0",
+        borderRadius: 8,
+        backgroundColor: "#fafafa"
+    },
+     inputLabel: {
+        fontSize: 14,
+        fontWeight: "600",
+        color: "#333",
+        marginBottom: 5,
+        marginLeft: 5
+    },
+    input: {
+        backgroundColor: "#fff",
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "#ddd",
+        color: "#333",
+        marginBottom: 15,
+    },
+    disabledInput: {
+        backgroundColor: "#f5f5f5",
+        color: "#666"
+    },
+    rowInputs: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        gap: 10
+    },
+    columnInput: {
+        flex: 1
+    },
+    smallInput: {
+        width: "48%"
     },
     itemHeader: {
         flexDirection: "row",
@@ -832,13 +848,7 @@ const styles = StyleSheet.create({
     removeItemButton: {
         padding: 5
     },
-    rowInputs: {
-        flexDirection: "row",
-        justifyContent: "space-between"
-    },
-    smallInput: {
-        width: "48%"
-    },
+    
     addItemButton: {
         flexDirection: "row",
         alignItems: "center",

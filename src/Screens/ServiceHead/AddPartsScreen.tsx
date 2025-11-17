@@ -15,14 +15,15 @@ import {
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 import { Header } from "../Header";
 import { useDispatch, useSelector } from "react-redux";
-import { 
-  searchParts, 
-  assignParts, 
-  selectSearchedParts, 
-  selectSearchLoading,
-  clearSearchedParts
+import {
+    searchParts,
+    assignParts,
+    selectSearchedParts,
+    selectSearchLoading,
+    clearSearchedParts
 } from "../../Redux/Slices/partsSlice";
 import debounce from 'lodash/debounce';
+import { fetchMaintenanceDetailNew } from "../../Redux/Slices/maintenanceSlice";
 
 const AddPartsScreen = ({ navigation, route }: any) => {
     const { maintenanceId, serviceSalePersonId, onPartsAdded } = route.params;
@@ -35,6 +36,7 @@ const AddPartsScreen = ({ navigation, route }: any) => {
     const [loading, setLoading] = useState(false);
     const [showQuantityDrawer, setShowQuantityDrawer] = useState(false);
     const [currentEditingPart, setCurrentEditingPart] = useState<any>(null);
+    const [quantityInputValue, setQuantityInputValue] = useState("");
 
     // Debounced search function
     const debouncedSearch = useRef(
@@ -59,6 +61,13 @@ const AddPartsScreen = ({ navigation, route }: any) => {
             dispatch(clearSearchedParts());
         }
     }, [searchText, debouncedSearch, dispatch]);
+
+    useEffect(() => {
+        if (showQuantityDrawer && currentEditingPart) {
+            const currentQty = selectedParts[currentEditingPart.id]?.quantity || 1;
+            setQuantityInputValue(currentQty.toString());
+        }
+    }, [showQuantityDrawer, currentEditingPart]);
 
     const togglePartSelection = (part: any) => {
         setSelectedParts(prev => {
@@ -93,7 +102,9 @@ const AddPartsScreen = ({ navigation, route }: any) => {
     const handleIncrement = () => {
         if (currentEditingPart) {
             const currentQty = selectedParts[currentEditingPart.id]?.quantity || 1;
-            updateQuantity(currentEditingPart.id.toString(), currentQty + 1);
+            const newQuantity = currentQty + 1;
+            updateQuantity(currentEditingPart.id.toString(), newQuantity);
+            setQuantityInputValue(newQuantity.toString());
         }
     };
 
@@ -101,16 +112,31 @@ const AddPartsScreen = ({ navigation, route }: any) => {
         if (currentEditingPart) {
             const currentQty = selectedParts[currentEditingPart.id]?.quantity || 1;
             if (currentQty > 1) {
-                updateQuantity(currentEditingPart.id.toString(), currentQty - 1);
+                const newQuantity = currentQty - 1;
+                updateQuantity(currentEditingPart.id.toString(), newQuantity);
+                setQuantityInputValue(newQuantity.toString());
             }
         }
     };
 
     const handleQuantityInputChange = (text: string) => {
-        if (currentEditingPart) {
-            const newQuantity = parseInt(text) || 1;
+        setQuantityInputValue(text);
+
+        // Allow empty string during typing
+        if (text === "") return;
+
+        const newQuantity = parseInt(text) || 1;
+        if (newQuantity >= 1 && currentEditingPart) {
             updateQuantity(currentEditingPart.id.toString(), newQuantity);
         }
+    };
+
+    const handleConfirmQuantity = () => {
+        const finalQuantity = parseInt(quantityInputValue) || 1;
+        if (finalQuantity < 1 && currentEditingPart) {
+            updateQuantity(currentEditingPart.id.toString(), 1);
+        }
+        setShowQuantityDrawer(false);
     };
 
     const removePart = (partId: string) => {
@@ -138,12 +164,15 @@ const AddPartsScreen = ({ navigation, route }: any) => {
 
             await dispatch(assignParts(partsPayload) as any);
             Alert.alert("Success", "Parts assigned successfully");
-            
-            // Call the callback to refresh data in PartsDetails
+
             if (onPartsAdded) {
                 onPartsAdded();
+                if (maintenanceId) {
+                    dispatch(fetchMaintenanceDetailNew(maintenanceId) as any);
+                }
+                setTimeout(() => navigation.goBack(), 300);
             }
-            
+
             navigation.goBack();
         } catch (error) {
             Alert.alert("Error", "Failed to assign parts");
@@ -233,7 +262,7 @@ const AddPartsScreen = ({ navigation, route }: any) => {
                 <View style={styles.selectedPartsContainer}>
                     <Text style={styles.selectedPartsTitle}>Selected Parts:</Text>
                     <ScrollView style={styles.selectedPartsList}>
-                        {Object.entries(selectedParts).map(([partId, partData]) => 
+                        {Object.entries(selectedParts).map(([partId, partData]) =>
                             renderSelectedPart(partId, partData)
                         )}
                     </ScrollView>
@@ -305,7 +334,7 @@ const AddPartsScreen = ({ navigation, route }: any) => {
                             <Text style={styles.availableStock}>
                                 Available Stock: {currentEditingPart?.quantity || 0}
                             </Text>
-                            
+
                             <View style={styles.quantityControls}>
                                 <TouchableOpacity
                                     style={styles.quantityButton}
@@ -313,17 +342,24 @@ const AddPartsScreen = ({ navigation, route }: any) => {
                                 >
                                     <Icon name="minus" size={24} color="#FFFFFF" />
                                 </TouchableOpacity>
-                                
+
                                 <TextInput
                                     style={styles.quantityInput}
-                                    value={currentEditingPart ? 
-                                        (selectedParts[currentEditingPart.id]?.quantity || 1).toString() 
-                                        : "1"}
+                                    value={quantityInputValue}
                                     onChangeText={handleQuantityInputChange}
+                                    onBlur={() => {
+                                        // যখন input focus হারায়, তখন minimum 1 ensure করুন
+                                        if (quantityInputValue === "" || parseInt(quantityInputValue) < 1) {
+                                            setQuantityInputValue("1");
+                                            if (currentEditingPart) {
+                                                updateQuantity(currentEditingPart.id.toString(), 1);
+                                            }
+                                        }
+                                    }}
                                     keyboardType="numeric"
                                     textAlign="center"
                                 />
-                                
+
                                 <TouchableOpacity
                                     style={styles.quantityButton}
                                     onPress={handleIncrement}
@@ -334,7 +370,7 @@ const AddPartsScreen = ({ navigation, route }: any) => {
 
                             <TouchableOpacity
                                 style={styles.confirmButton}
-                                onPress={() => setShowQuantityDrawer(false)}
+                                onPress={handleConfirmQuantity}
                             >
                                 <Text style={styles.confirmButtonText}>Confirm</Text>
                             </TouchableOpacity>

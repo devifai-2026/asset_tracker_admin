@@ -263,6 +263,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
 
     const handleUpdate = () => {
         Alert.alert("Success", "Details updated successfully");
+        dispatch(fetchMaintenanceDetailNew(maintenanceId) as any);
     };
 
     const onDateChange = (event: any, date?: Date) => {
@@ -282,6 +283,23 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
             return { icon: "clock-outline", color: "#FF9800", text: "Pending" };
         }
     };
+
+    const shouldShowEngineerSection = () => {
+        if (!maintenanceDetail?.serviceSalePersons?.length) return false;
+
+        if (!maintenanceDetail?.reject_comments?.length) return true;
+
+        const hasAcceptedEngineer = maintenanceDetail.serviceSalePersons.some((person: any) => {
+            const personComment = maintenanceDetail.reject_comments.find(
+                (comment: any) => comment.name === person.name
+            );
+            return personComment?.is_accepted === true;
+        });
+
+        return hasAcceptedEngineer;
+    };
+
+    const showEngineerSection = shouldShowEngineerSection();
 
     if (loading) {
         return (
@@ -488,7 +506,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                 {showRejectComments && (
                                     <View style={styles.commentsContainer}>
                                         {maintenanceDetail.reject_comments.map((rejectComment: any, index: number) => {
-                                            const statusInfo = getStatusInfo(rejectComment.is_accepeted);
+                                           const statusInfo = getStatusInfo(rejectComment.is_accepted);
                                             return (
                                                 <View key={index} style={styles.rejectCommentItem}>
                                                     {/* Reject Comment Header */}
@@ -542,7 +560,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                         </Text>
                                         <View style={styles.buttonContainer}>
                                             {/* Wallet Button */}
-                                            <TouchableOpacity
+                                            {showEngineerSection && <TouchableOpacity
                                                 style={styles.walletButton}
                                                 onPress={() => navigation.navigate("WalletScreen", {
                                                     engineerId: person.id,
@@ -552,7 +570,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                             >
                                                 <Text style={styles.buttonText}>Wallet</Text>
                                                 <Icon name="wallet-outline" size={16} color="#666" />
-                                            </TouchableOpacity>
+                                            </TouchableOpacity>}
                                         </View>
                                     </View>
                                 ))
@@ -569,8 +587,8 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                 <Text style={styles.partsTitle}>Parts Details</Text>
 
                                 {/* Debug: Check how many accepted persons */}
-                                {console.log("All service persons:", maintenanceDetail?.serviceSalePersons)}
-                                {console.log("Reject comments:", maintenanceDetail?.reject_comments)}
+                                {/* {console.log("All service persons:", maintenanceDetail?.serviceSalePersons)}
+                                {console.log("Reject comments:", maintenanceDetail?.reject_comments)} */}
 
                                 {/* Display service persons from API */}
                                 {maintenanceDetail?.serviceSalePersons
@@ -608,7 +626,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                         </View>
 
                         {/* Engineer Section */}
-                        <EngineerSection
+                        {<EngineerSection
                             showWalletPopup={showWalletPopup}
                             setShowWalletPopup={setShowWalletPopup}
                             navigation={navigation}
@@ -637,7 +655,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                             maintenanceId={maintenanceId}
                             maintenanceData={maintenanceDetail}
                             status={maintenanceDetail?.status || ""}
-                        />
+                        />}
                     </ScrollView>
 
                     {/* Wallet Modal */}
@@ -1184,7 +1202,7 @@ const styles = StyleSheet.create({
         flexShrink: 0, // Added to prevent status from shrinking
         marginLeft: 8, // Added spacing
     },
-   emptyContainer: {
+    emptyContainer: {
         padding: 32,
         alignItems: 'center',
         justifyContent: 'center',

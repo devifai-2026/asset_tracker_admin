@@ -102,7 +102,7 @@ const RemovePartsScreen = () => {
     // Debounced search function
     const debouncedSearch = useRef(
         debounce((query: string) => {
-            if (query.trim().length > 0) {
+            if (query.trim()?.length > 0) {
                 dispatch(searchParts(query) as any);
             } else {
                 dispatch(clearSearchedParts());
@@ -170,7 +170,7 @@ const RemovePartsScreen = () => {
         try {
             const partsToRemove = Object.values(selectedParts);
 
-            if (partsToRemove.length === 0) {
+            if (partsToRemove?.length === 0) {
                 Alert.alert("Error", "Please select at least one part");
                 return;
             }
@@ -252,7 +252,7 @@ const RemovePartsScreen = () => {
         </View>
     ), [selectedParts, togglePartSelection, updateQuantity]);
 
-    const totalSelectedParts = Object.keys(selectedParts).length;
+    const totalSelectedParts = Object.keys(selectedParts)?.length;
 
     return (
         <SafeAreaView style={styles.safeArea}>
@@ -291,7 +291,7 @@ const RemovePartsScreen = () => {
                             <Text style={styles.searchInfoText}>
                                 {searchLoading ? 
                                     "Searching..." : 
-                                    `Found ${searchedParts.length} results for "${searchQuery}"`
+                                    `Found ${searchedParts?.length} results for "${searchQuery}"`
                                 }
                             </Text>
                         </View>
@@ -324,7 +324,7 @@ const RemovePartsScreen = () => {
                             maxToRenderPerBatch={10}
                             windowSize={5}
                             keyboardShouldPersistTaps="handled"
-                            contentContainerStyle={searchedParts.length === 0 ? styles.emptyListContent : undefined}
+                            contentContainerStyle={searchedParts?.length === 0 ? styles.emptyListContent : undefined}
                         />
                     </View>
                 )}

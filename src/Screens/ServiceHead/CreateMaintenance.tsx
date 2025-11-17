@@ -22,6 +22,8 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { launchCamera, launchImageLibrary } from 'react-native-image-picker';
 import { maintenanceApi } from '../../api/maintenanceApi';
 import { Header } from "../Header";
+import { fetchAllMaintenance } from "../../Redux/Slices/maintenanceSlice";
+import { useDispatch } from "react-redux";
 
 export const CreateMaintenance = () => {
     const navigation = useNavigation<any>();
@@ -43,6 +45,7 @@ export const CreateMaintenance = () => {
     const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [ticketNo, setTicketNo] = useState("");
     const [showBreakdownTypeModal, setShowBreakdownTypeModal] = useState(false);
+    const dispatch = useDispatch();
 
     useEffect(() => {
         fetchAssets();
@@ -286,7 +289,11 @@ export const CreateMaintenance = () => {
             setTicketNo(createResponse.tiket_no);
             setShowSuccessModal(true);
 
+
         } catch (err: any) {
+            if (!err) {
+                dispatch(fetchAllMaintenance() as any);
+            }
             const errorMessage = err.response.data.error
 
             console.log("Create Maintenance Error:", err.response.data.error || err.message || err);
@@ -312,6 +319,7 @@ export const CreateMaintenance = () => {
             }
         } finally {
             setCreating(false);
+            dispatch(fetchAllMaintenance() as any)
         }
     };
 
@@ -344,12 +352,13 @@ export const CreateMaintenance = () => {
 
     const handleSuccessModalClose = () => {
         setShowSuccessModal(false);
+        dispatch(fetchAllMaintenance() as any);
         navigation.goBack();
     };
 
     const openAssetModal = () => {
         setShowAssetModal(true);
-        setSearchQuery(""); // Reset search query when modal opens
+        setSearchQuery("");
     };
 
     const selectBreakdownType = (type: string) => {
