@@ -136,7 +136,7 @@ export const Maintenance = () => {
       ticket.asset_no.toLowerCase().includes(searchQuery.toLowerCase());
 
     return matchesTab && matchesSearch;
-  });
+  }).reverse();
 
   // Count tickets for each status
   const getTicketCount = (status: string) => {
