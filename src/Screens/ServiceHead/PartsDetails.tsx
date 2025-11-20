@@ -178,10 +178,42 @@ const PartsDetails = ({ navigation, route }: any) => {
 
     const handleApproveParts = async () => {
         try {
+            // VALIDATION: Check for invalid quantities before submitting
+            const invalidParts: string[] = [];
+            
+            selectedParts.forEach(part => {
+                const inputValue = approveQuantities[part.id];
+                const approvedQty = inputValue ? parseInt(inputValue) : 0;
+                const requestedQty = part.quantity;
+                
+                // Check for empty or 0 value
+                if (!inputValue || inputValue.trim() === '' || approvedQty === 0) {
+                    invalidParts.push(`${part.partNo} - Cannot approve 0 or empty quantity`);
+                } 
+                // Check for value greater than requested quantity
+                else if (approvedQty > requestedQty) {
+                    invalidParts.push(`${part.partNo} - Approved quantity (${approvedQty}) exceeds requested quantity (${requestedQty})`);
+                }
+                // Check for negative values
+                else if (approvedQty < 0) {
+                    invalidParts.push(`${part.partNo} - Cannot approve negative quantity`);
+                }
+            });
+
+            // If there are invalid parts, show alert and stop submission
+            if (invalidParts.length > 0) {
+                Alert.alert(
+                    "Invalid Quantities",
+                    `Please fix the following issues:\n\n• ${invalidParts.join('\n• ')}`,
+                    [{ text: "OK" }]
+                );
+                return;
+            }
+
             const approvalPayload = selectedParts.map(part => ({
                 id: parseInt(part.originalData.id),
                 maintenance_id: part.originalData.maintenance_id,
-                approved_quantity: parseInt(approveQuantities[part.id] || part.quantity),
+                approved_quantity: parseInt(approveQuantities[part.id]),
                 is_approved: true
             }));
 
@@ -197,14 +229,12 @@ const PartsDetails = ({ navigation, route }: any) => {
                         return {
                             ...part,
                             status: "approved",
-                            quantity: parseInt(approveQuantities[part.id] || part.quantity),
+                            quantity: parseInt(approveQuantities[part.id]),
                             isSelected: false
                         };
                     }
                     return part;
                 });
-
-
 
                 setPartsData(updatedParts);
                 setSelectedParts([]);
@@ -221,49 +251,30 @@ const PartsDetails = ({ navigation, route }: any) => {
         }
     };
 
-    // FIXED: Quantity change with validation - minimum 1 and maximum requested quantity
+    // FLEXIBLE: Allow any input including empty for typing
     const handleQuantityChange = (partId: string, value: string) => {
-        // Allow empty for typing, but don't save empty values
+        // Allow empty string for flexible typing
         if (value === '') {
-            const newQuantities = { ...approveQuantities };
-            delete newQuantities[partId];
-            setApproveQuantities(newQuantities);
+            setApproveQuantities({
+                ...approveQuantities,
+                [partId]: ''
+            });
             return;
         }
 
-        // Only allow numbers
+        // Only allow numbers (including multiple zeros for typing flexibility)
         if (/^\d+$/.test(value)) {
-            const numericValue = parseInt(value);
-            const part = selectedParts.find(p => p.id === partId);
-            const requestedQty = part?.quantity || 1;
-
-            // Minimum 1 - jodi 0 or negative hoy, set to 1
-            if (numericValue < 1) {
-                setApproveQuantities({
-                    ...approveQuantities,
-                    [partId]: "1"
-                });
-            }
-            // Maximum requested quantity - jodi besi hoy, set to requested quantity
-            else if (numericValue > requestedQty) {
-                setApproveQuantities({
-                    ...approveQuantities,
-                    [partId]: requestedQty.toString()
-                });
-            }
-            else {
-                setApproveQuantities({
-                    ...approveQuantities,
-                    [partId]: value
-                });
-            }
+            setApproveQuantities({
+                ...approveQuantities,
+                [partId]: value
+            });
         }
     };
 
     // FIXED: Increment - never exceed requested quantity
     const incrementQuantity = (partId: string) => {
         const currentValue = approveQuantities[partId];
-        const currentQty = parseInt(currentValue) || 1;
+        const currentQty = currentValue ? parseInt(currentValue) : 0;
         const part = selectedParts.find(p => p.id === partId);
         const requestedQty = part?.quantity || 1;
 
@@ -272,27 +283,49 @@ const PartsDetails = ({ navigation, route }: any) => {
                 ...approveQuantities,
                 [partId]: (currentQty + 1).toString()
             });
+        } else {
+            Alert.alert(
+                "Maximum Quantity",
+                `Cannot exceed requested quantity of ${requestedQty}`,
+                [{ text: "OK" }]
+            );
         }
     };
 
     // FIXED: Decrement - never go below 1
     const decrementQuantity = (partId: string) => {
         const currentValue = approveQuantities[partId];
-        const currentQty = parseInt(currentValue) || 1;
+        const currentQty = currentValue ? parseInt(currentValue) : 1;
 
         if (currentQty > 1) {
             setApproveQuantities({
                 ...approveQuantities,
                 [partId]: (currentQty - 1).toString()
             });
+        } else {
+            Alert.alert(
+                "Minimum Quantity",
+                "Cannot approve 0 quantity",
+                [{ text: "OK" }]
+            );
         }
     };
 
-    // NEW: Check if all parts have valid quantities
+    // NEW: Check if all parts have valid quantities (not empty, > 0, and <= requested)
     const allPartsHaveValidQuantities = selectedParts.every(part => {
-        const quantity = approveQuantities[part.id];
-        return quantity && parseInt(quantity) > 0;
+        const inputValue = approveQuantities[part.id];
+        if (!inputValue || inputValue.trim() === '') return false;
+        
+        const quantity = parseInt(inputValue);
+        const requestedQty = part.quantity;
+        
+        return quantity > 0 && quantity <= requestedQty;
     });
+
+    // Helper to get display value for input (shows empty when typing)
+    const getDisplayValue = (partId: string) => {
+        return approveQuantities[partId] || '';
+    };
 
     const getStatusButtonStyle = (status: string) => {
         switch (status) {
@@ -546,10 +579,12 @@ const PartsDetails = ({ navigation, route }: any) => {
 
                                                     <TextInput
                                                         style={styles.quantityInput}
-                                                        value={approveQuantities[part.id] || "1"}
+                                                        value={getDisplayValue(part.id)}
                                                         onChangeText={(value) => handleQuantityChange(part.id, value)}
                                                         keyboardType="numeric"
                                                         textAlign="center"
+                                                        placeholder="1"
+                                                        placeholderTextColor="#9E9E9E"
                                                     />
 
                                                     <TouchableOpacity

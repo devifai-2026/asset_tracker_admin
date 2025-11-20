@@ -54,6 +54,10 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
     const [showComments, setShowComments] = useState(false);
     const [showRejectComments, setShowRejectComments] = useState(false);
     const [showAttachments, setShowAttachments] = useState(false);
+    
+    // New state for full screen image view
+    const [selectedFullScreenImage, setSelectedFullScreenImage] = useState<any>(null);
+    const [showFullScreenImage, setShowFullScreenImage] = useState(false);
 
     // Get data from Redux store
     const maintenanceDetail = useSelector(selectMaintenanceDetail);
@@ -65,8 +69,6 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
             dispatch(fetchMaintenanceDetailNew(maintenanceId) as any);
         }
     }, [maintenanceId, dispatch]);
-
-
 
     // Handle maintenance closure
     const handleMaintenanceClosure = async () => {
@@ -186,6 +188,18 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
         status: maintenanceDetail?.status || "In Progress",
         deadline: formatDate(maintenanceDetail?.ready_date || "2023-10-20"),
         engineer: maintenanceDetail?.serviceSalePersons?.[0]?.name || "John Doe"
+    };
+
+    // Function to handle image tap for full screen view
+    const handleImageTap = (photo: any) => {
+        setSelectedFullScreenImage(photo);
+        setShowFullScreenImage(true);
+    };
+
+    // Function to close full screen image
+    const closeFullScreenImage = () => {
+        setShowFullScreenImage(false);
+        setSelectedFullScreenImage(null);
     };
 
     const showEngineerOptions = () => {
@@ -409,7 +423,11 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                 {showAttachments && (
                                     <View style={styles.attachmentsContainer}>
                                         {maintenanceDetail.photos.map((photo: any, index: number) => (
-                                            <View key={photo.id || index} style={styles.attachmentItem}>
+                                            <TouchableOpacity
+                                                key={photo.id || index}
+                                                style={styles.attachmentItem}
+                                                onPress={() => handleImageTap(photo)}
+                                            >
                                                 <Image
                                                     source={{ uri: `https://${photo.image_uri}` }}
                                                     style={styles.attachmentImage}
@@ -418,7 +436,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                                 <Text style={styles.attachmentText}>
                                                     {photo.image_uri?.split('/').pop() || `Attachment ${index + 1}`}
                                                 </Text>
-                                            </View>
+                                            </TouchableOpacity>
                                         ))}
                                     </View>
                                 )}
@@ -657,6 +675,37 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                             status={maintenanceDetail?.status || ""}
                         />}
                     </ScrollView>
+
+                    {/* Full Screen Image Modal */}
+                    <Modal
+                        visible={showFullScreenImage}
+                        transparent={true}
+                        animationType="fade"
+                        onRequestClose={closeFullScreenImage}
+                    >
+                        <View style={styles.fullScreenModal}>
+                            <TouchableOpacity 
+                                style={styles.fullScreenCloseButton}
+                                onPress={closeFullScreenImage}
+                            >
+                                <Icon name="close" size={30} color="#FFFFFF" />
+                            </TouchableOpacity>
+                            
+                            {selectedFullScreenImage && (
+                                <Image
+                                    source={{ uri: `https://${selectedFullScreenImage.image_uri}` }}
+                                    style={styles.fullScreenImage}
+                                    resizeMode="contain"
+                                />
+                            )}
+                            
+                            <View style={styles.fullScreenImageInfo}>
+                                <Text style={styles.fullScreenImageText}>
+                                    {selectedFullScreenImage?.image_uri?.split('/').pop() || "Attachment"}
+                                </Text>
+                            </View>
+                        </View>
+                    </Modal>
 
                     {/* Wallet Modal */}
                     <Modal
@@ -1150,6 +1199,40 @@ const styles = StyleSheet.create({
     attachmentText: {
         fontSize: 12,
         color: "#666",
+        textAlign: "center",
+    },
+    // Full Screen Image Styles
+    fullScreenModal: {
+        flex: 1,
+        backgroundColor: "rgba(0, 0, 0, 0.9)",
+        justifyContent: "center",
+        alignItems: "center",
+    },
+    fullScreenCloseButton: {
+        position: "absolute",
+        top: 40,
+        right: 20,
+        zIndex: 10,
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+        borderRadius: 20,
+        padding: 5,
+    },
+    fullScreenImage: {
+        width: "100%",
+        height: "80%",
+    },
+    fullScreenImageInfo: {
+        position: "absolute",
+        bottom: 40,
+        left: 0,
+        right: 0,
+        alignItems: "center",
+        padding: 10,
+        backgroundColor: "rgba(0, 0, 0, 0.5)",
+    },
+    fullScreenImageText: {
+        color: "#FFFFFF",
+        fontSize: 14,
         textAlign: "center",
     },
 

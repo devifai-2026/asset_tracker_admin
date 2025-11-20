@@ -122,6 +122,7 @@ export const HeadMaintenance = () => {
             case "open": return "Open";
             case "in_progress": return "In Progress";
             case "closed": return "Closed";
+            case "temporary_closed": return "Closed";
             default: return status;
         }
     };

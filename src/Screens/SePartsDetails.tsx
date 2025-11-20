@@ -174,7 +174,7 @@ const SePartsDetails = () => {
         const installData = selectedParts.map(part => ({
             part_id: part.id,
             maintenance_id: part.maintenance_id,
-            quantity: quantityInputs[part.id] || "0"
+            quantity: parseInt(quantityInputs[part.id] || "0") // String to number convert
         }));
 
         console.log("Install data:", installData);

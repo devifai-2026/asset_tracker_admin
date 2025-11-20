@@ -9,6 +9,7 @@ import {
     ActivityIndicator,
     Alert,
     SafeAreaView,
+    Dimensions,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { useDispatch, useSelector } from "react-redux";
@@ -48,6 +49,9 @@ interface ApiResponse {
 }
 
 const ITEMS_PER_PAGE = 5;
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+type MachineType = 'DC Machine' | 'IC Machine';
 
 const MaintenanceRatingScreen = () => {
     const route = useRoute();
@@ -61,6 +65,7 @@ const MaintenanceRatingScreen = () => {
     const [loading, setLoading] = useState(true);
     const [submitting, setSubmitting] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
+    const [selectedMachineType, setSelectedMachineType] = useState<MachineType>('DC Machine');
 
     useEffect(() => {
         fetchRatingCategories();
@@ -70,7 +75,7 @@ const MaintenanceRatingScreen = () => {
         if (allCategories.length > 0) {
             filterCategoriesByType();
         }
-    }, [allCategories, types]);
+    }, [allCategories, types, selectedMachineType]);
 
     const fetchRatingCategories = async () => {
         try {
@@ -114,14 +119,19 @@ const MaintenanceRatingScreen = () => {
     const filterCategoriesByType = () => {
         let filtered: RatingCategory[] = [];
 
+        // First filter by machine type
+        const machineFiltered = allCategories.filter(category => 
+            category.form_name === selectedMachineType
+        );
+
         if (types === "preventive_maintenance") {
             // Show only categories with sub_value (non-empty arrays)
-            filtered = allCategories.filter(category =>
+            filtered = machineFiltered.filter(category =>
                 category.sub_value && category.sub_value.length > 0
             );
         } else {
             // Show only categories with empty sub_value arrays
-            filtered = allCategories.filter(category =>
+            filtered = machineFiltered.filter(category =>
                 !category.sub_value || category.sub_value.length === 0
             );
         }
@@ -333,7 +343,11 @@ const MaintenanceRatingScreen = () => {
                 <Header />
             </View>
 
-            <ScrollView style={styles.scrollContainer}>
+            <ScrollView 
+                style={styles.scrollContainer}
+                contentContainerStyle={styles.scrollContent}
+                showsVerticalScrollIndicator={false}
+            >
                 <View style={styles.card}>
                     <Text style={styles.screenTitle}>Please rate this machine</Text>
                     <Text style={styles.screenSubtitle}>
@@ -342,6 +356,44 @@ const MaintenanceRatingScreen = () => {
                     <Text style={styles.typeIndicator}>
                         Type: {types === "preventive_maintenance" ? "Preventive Maintenance" : "Other Maintenance"}
                     </Text>
+
+                    {/* Machine Type Tabs */}
+                    <View style={styles.tabContainer}>
+                        <TouchableOpacity
+                            style={[
+                                styles.tab,
+                                selectedMachineType === 'DC Machine' && styles.tabActive
+                            ]}
+                            onPress={() => {
+                                setSelectedMachineType('DC Machine');
+                                setCurrentPage(1);
+                            }}
+                        >
+                            <Text style={[
+                                styles.tabText,
+                                selectedMachineType === 'DC Machine' && styles.tabTextActive
+                            ]}>
+                                DC Machine
+                            </Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[
+                                styles.tab,
+                                selectedMachineType === 'IC Machine' && styles.tabActive
+                            ]}
+                            onPress={() => {
+                                setSelectedMachineType('IC Machine');
+                                setCurrentPage(1);
+                            }}
+                        >
+                            <Text style={[
+                                styles.tabText,
+                                selectedMachineType === 'IC Machine' && styles.tabTextActive
+                            ]}>
+                                IC Machine
+                            </Text>
+                        </TouchableOpacity>
+                    </View>
 
                     <View style={styles.progressSection}>
                         <Text style={styles.sectionTitle}>Overall Progress</Text>
@@ -354,14 +406,12 @@ const MaintenanceRatingScreen = () => {
                 {currentCategories.map(category => (
                     <View key={category.id} style={styles.card}>
                         <Text style={styles.categoryTitle}>{category.titel}</Text>
-                        {/* <Text style={styles.categoryWeight}>Weight: {category.percentage}%</Text> */}
 
                         {category.sub_value && category.sub_value.length > 0 ? (
                             // Preventive maintenance with sub categories
                             category.sub_value.map(sub => (
                                 <View key={sub.id} style={styles.subCategory}>
                                     <Text style={styles.subCategoryTitle}>{sub.titel || `Sub-item ${sub.id}`}</Text>
-                                    {/* <Text style={styles.subCategoryWeight}>Weight: {sub.percentage}%</Text> */}
 
                                     <View style={styles.ratingOptions}>
                                         {[0, 2.5, 5].map(rating => (
@@ -424,10 +474,10 @@ const MaintenanceRatingScreen = () => {
                             onPress={() => setCurrentPage(Math.max(1, currentPage - 1))}
                             disabled={currentPage === 1}
                         >
-                            <Text style={styles.paginationText}>Previous</Text>
+                            <Text style={styles.paginationButtonText}>Previous</Text>
                         </TouchableOpacity>
 
-                        <Text style={styles.paginationText}>
+                        <Text style={styles.paginationInfo}>
                             Page {currentPage} of {totalPages}
                         </Text>
 
@@ -441,13 +491,13 @@ const MaintenanceRatingScreen = () => {
                             }}
                             disabled={!isCurrentPageComplete() || currentPage === totalPages}
                         >
-                            <Text style={styles.paginationText}>Next</Text>
+                            <Text style={styles.paginationButtonText}>Next</Text>
                         </TouchableOpacity>
                     </View>
                 )}
 
                 {currentPage === totalPages && isAllRated() && (
-                    <View style={styles.card}>
+                    <View style={styles.submitSection}>
                         <Text style={styles.summaryTitle}>Overall Rating Summary</Text>
                         <Text style={styles.summaryScore}>
                             {calculateFinalRating().toFixed(2)} / 5.00
@@ -469,6 +519,9 @@ const MaintenanceRatingScreen = () => {
                         </TouchableOpacity>
                     </View>
                 )}
+
+                {/* Bottom spacer to avoid overlap with navigation */}
+                <View style={styles.bottomSpacer} />
             </ScrollView>
         </SafeAreaView>
     );
@@ -513,6 +566,9 @@ const styles = StyleSheet.create({
     },
     scrollContainer: {
         flex: 1
+    },
+    scrollContent: {
+        paddingBottom: 120, // Extra padding for navigation bar
     },
     centerContainer: {
         flex: 1,
@@ -565,6 +621,37 @@ const styles = StyleSheet.create({
         fontWeight: "600",
         marginBottom: 15,
         textAlign: "center",
+    },
+    // Tab Styles
+    tabContainer: {
+        flexDirection: "row",
+        marginBottom: 15,
+        backgroundColor: "#f5f5f5",
+        borderRadius: 8,
+        padding: 4,
+    },
+    tab: {
+        flex: 1,
+        paddingVertical: 10,
+        alignItems: "center",
+        borderRadius: 6,
+    },
+    tabActive: {
+        backgroundColor: "#fff",
+        shadowColor: "#000",
+        shadowOpacity: 0.1,
+        shadowOffset: { width: 0, height: 1 },
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    tabText: {
+        fontSize: 14,
+        fontWeight: "500",
+        color: "#666",
+    },
+    tabTextActive: {
+        color: "#0FA37F",
+        fontWeight: "600",
     },
     progressSection: {
         flexDirection: "row",
@@ -650,18 +737,41 @@ const styles = StyleSheet.create({
         alignItems: "center",
         padding: 15,
         marginTop: 10,
+        marginBottom: 10,
     },
     paginationButton: {
-        padding: 10,
+        paddingVertical: 12,
+        paddingHorizontal: 20,
         backgroundColor: "#0FA37F",
         borderRadius: 8,
+        minWidth: 80,
+        alignItems: 'center',
     },
     paginationButtonDisabled: {
         backgroundColor: "#ccc",
     },
-    paginationText: {
+    paginationButtonText: {
         color: "#fff",
+        fontWeight: "600",
+        fontSize: 14,
+    },
+    paginationInfo: {
+        color: "#666",
         fontWeight: "500",
+        fontSize: 14,
+    },
+    submitSection: {
+        backgroundColor: "#fff",
+        marginHorizontal: 12,
+        marginTop: 8,
+        padding: 15,
+        borderRadius: 12,
+        shadowColor: "#000",
+        shadowOpacity: 0.05,
+        shadowOffset: { width: 0, height: 2 },
+        shadowRadius: 4,
+        elevation: 2,
+        marginBottom: 20,
     },
     summaryTitle: {
         fontSize: 16,
@@ -695,6 +805,9 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontSize: 16,
         fontWeight: "bold",
+    },
+    bottomSpacer: {
+        height: 100,
     },
 });
 
