@@ -98,17 +98,22 @@ const SePartsDetails = () => {
         }
     };
 
-    // Helper function to check if part is already installed
-    const isPartInstalled = (part: WalletPart) => {
-        return part.install_quantity !== null && part.install_quantity > 0;
+    // Helper function to calculate available wallet
+    const getAvailableWallet = (part: WalletPart) => {
+        return (part.already_released || 0) - (part.comsumed_quantity || 0);
+    };
+
+    // Helper function to check if part has available wallet
+    const hasAvailableWallet = (part: WalletPart) => {
+        return getAvailableWallet(part) > 0;
     };
 
     // Helper function to check if part can be selected for installation
     const canSelectPartForInstallation = (part: WalletPart) => {
         return part.is_approved &&
             !part.is_removal_part &&
-            !isPartInstalled(part) &&
-            part.approve_quantity > 0;
+            part.approve_quantity > 0 &&
+            hasAvailableWallet(part); // ✅ শুধু wallet available থাকলেই install করা যাবে
     };
 
     const togglePartSelection = (part: WalletPart) => {
@@ -118,35 +123,39 @@ const SePartsDetails = () => {
             delete newInputs[part.id];
             setQuantityInputs(newInputs);
         } else {
+            const availableWallet = getAvailableWallet(part);
+            const initialQuantity = Math.min(1, availableWallet); // Start with 1 or available wallet, whichever is smaller
+            
             setSelectedParts([...selectedParts, part]);
             setQuantityInputs({
                 ...quantityInputs,
-                [part.id]: "1" // Start with minimum quantity of 1 instead of approved quantity
+                [part.id]: initialQuantity.toString()
             });
         }
     };
 
     const handleQuantityChange = (partId: number, value: string) => {
-        // Allow only numbers
+        // Allow only numbers and empty string
         const numericValue = value.replace(/[^0-9]/g, '');
 
-        // If empty, set to minimum 1
+        // If empty, set to empty string (not "1")
         if (numericValue === '') {
             setQuantityInputs({
                 ...quantityInputs,
-                [partId]: "1"
+                [partId]: ""
             });
             return;
         }
 
         const quantity = parseInt(numericValue);
         const part = selectedParts.find(p => p.id === partId);
-        const maxQuantity = part?.approve_quantity || 1;
+        const availableWallet = getAvailableWallet(part!);
+        const maxQuantity = Math.min(part?.approve_quantity || 1, availableWallet);
 
         // Ensure quantity is at least 1
         const validatedQuantity = Math.max(1, quantity);
 
-        // Ensure quantity doesn't exceed approved quantity
+        // Ensure quantity doesn't exceed approved quantity AND available wallet
         const finalQuantity = Math.min(validatedQuantity, maxQuantity);
 
         setQuantityInputs({
@@ -155,12 +164,42 @@ const SePartsDetails = () => {
         });
     };
 
+    // Check if all quantity inputs are valid
+    const areAllQuantitiesValid = () => {
+        return selectedParts.every(part => {
+            const quantityStr = quantityInputs[part.id];
+            if (!quantityStr || quantityStr.trim() === "") {
+                return false; // Empty input is invalid
+            }
+            
+            const quantity = parseInt(quantityStr);
+            const availableWallet = getAvailableWallet(part);
+            
+            return quantity >= 1 && 
+                   quantity <= part.approve_quantity && 
+                   quantity <= availableWallet;
+        });
+    };
+
     const handleInstallSubmit = async () => {
         if (installing) return;
 
+        // Validate that all inputs have values
+        const emptyInputs = selectedParts.filter(part => {
+            const quantityStr = quantityInputs[part.id];
+            return !quantityStr || quantityStr.trim() === "";
+        });
+
+        if (emptyInputs.length > 0) {
+            Alert.alert("Error", "Please enter quantity for all selected parts");
+            return;
+        }
+
         // Validate quantities
         for (const part of selectedParts) {
-            const quantity = parseInt(quantityInputs[part.id] || "0");
+            const quantity = parseInt(quantityInputs[part.id]);
+            const availableWallet = getAvailableWallet(part);
+            
             if (quantity <= 0) {
                 Alert.alert("Error", `Please enter a valid quantity for part ${part.part_no}`);
                 return;
@@ -169,12 +208,19 @@ const SePartsDetails = () => {
                 Alert.alert("Error", `Cannot install more than approved quantity (${part.approve_quantity}) for part ${part.part_no}`);
                 return;
             }
+            if (quantity > availableWallet) {
+                Alert.alert(
+                    "Insufficient Wallet", 
+                    `Available wallet for ${part.part_no} is ${availableWallet}. You cannot install ${quantity} units.`
+                );
+                return;
+            }
         }
 
         const installData = selectedParts.map(part => ({
-            part_id: part.id,
+            part_id: part.part_inventory_id,
             maintenance_id: part.maintenance_id,
-            quantity: parseInt(quantityInputs[part.id] || "0") // String to number convert
+            quantity: parseInt(quantityInputs[part.id])
         }));
 
         console.log("Install data:", installData);
@@ -247,13 +293,15 @@ const SePartsDetails = () => {
         .filter(part => {
             switch (filter) {
                 case "installed":
-                    return isPartInstalled(part);
+                    return part.install_quantity !== null && part.install_quantity > 0;
                 case "removed":
                     return part.is_removal_part;
                 case "approved":
                     return part.is_approved;
                 case "pending":
                     return !part.is_approved;
+                case "with_wallet":
+                    return hasAvailableWallet(part) && !part.is_removal_part;
                 default:
                     return true;
             }
@@ -270,21 +318,21 @@ const SePartsDetails = () => {
         });
 
     const getStatusColor = (part: WalletPart) => {
-        if (isPartInstalled(part)) return "#2196F3"; // Blue for installed
+        if (part.install_quantity !== null && part.install_quantity > 0) return "#2196F3"; // Blue for installed
         if (part.is_approved) return "#0FA37F"; // Green for approved
         if (part.is_removal_part) return "#dc3545"; // Red for removal
         return "#f7b267"; // Orange for pending
     };
 
     const getStatusText = (part: WalletPart) => {
-        if (isPartInstalled(part)) return "Installed";
+        if (part.install_quantity !== null && part.install_quantity > 0) return "Installed";
         if (part.is_approved) return "Approved";
         if (part.is_removal_part) return "Removal Part";
         return "Pending Approval";
     };
 
     const getStatusIcon = (part: WalletPart) => {
-        if (isPartInstalled(part)) return "check-circle";
+        if (part.install_quantity !== null && part.install_quantity > 0) return "check-circle";
         if (part.is_approved) return "check-circle";
         if (part.is_removal_part) return "remove-circle";
         return "pending";
@@ -360,7 +408,7 @@ const SePartsDetails = () => {
                 <View style={styles.searchContainer}>
                     <TextInput
                         style={styles.searchInput}
-                        placeholder="Search..."
+                        placeholder="Search by part no, maintenance ID, or status..."
                         value={searchQuery}
                         onChangeText={setSearchQuery}
                         clearButtonMode="while-editing"
@@ -420,6 +468,12 @@ const SePartsDetails = () => {
                         >
                             <Text style={[styles.filterText, filter === "pending" && styles.filterTextActive]}>Pending</Text>
                         </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.filterButton, filter === "with_wallet" && styles.filterButtonActive]}
+                            onPress={() => setFilter("with_wallet")}
+                        >
+                            <Text style={[styles.filterText, filter === "with_wallet" && styles.filterTextActive]}>Available for Install</Text>
+                        </TouchableOpacity>
                     </ScrollView>
                 </View>
 
@@ -445,6 +499,20 @@ const SePartsDetails = () => {
                                             style={styles.statusIcon}
                                         />
                                         <Text style={styles.partNo}>{item.part_no}</Text>
+                                        {canSelectPartForInstallation(item) && (
+                                            <View style={styles.walletBadge}>
+                                                <Text style={styles.walletBadgeText}>
+                                                    Wallet: {getAvailableWallet(item)}
+                                                </Text>
+                                            </View>
+                                        )}
+                                        {item.install_quantity !== null && item.install_quantity > 0 && (
+                                            <View style={styles.installedBadge}>
+                                                <Text style={styles.installedBadgeText}>
+                                                    Installed: {item.install_quantity}
+                                                </Text>
+                                            </View>
+                                        )}
                                     </View>
                                     <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item) }]}>
                                         <Text style={styles.statusText}>{getStatusText(item)}</Text>
@@ -452,18 +520,20 @@ const SePartsDetails = () => {
                                 </View>
 
                                 <View style={styles.headerRightActions}>
-                                    {/* Only show checkbox for parts that can be installed */}
+                                    {/* Show checkbox for parts that have available wallet - even if already installed */}
                                     {canSelectPartForInstallation(item) && (
-                                        <TouchableOpacity
-                                            onPress={() => togglePartSelection(item)}
-                                            style={styles.checkboxContainer}
-                                        >
-                                            <Icon
-                                                name={selectedParts.some(p => p.id === item.id) ? "check-box" : "check-box-outline-blank"}
-                                                size={24}
-                                                color={selectedParts.some(p => p.id === item.id) ? "#0FA37F" : "#666"}
-                                            />
-                                        </TouchableOpacity>
+                                        <View style={styles.checkboxWrapper}>
+                                            <TouchableOpacity
+                                                onPress={() => togglePartSelection(item)}
+                                                style={styles.checkboxContainer}
+                                            >
+                                                <Icon
+                                                    name={selectedParts.some(p => p.id === item.id) ? "check-box" : "check-box-outline-blank"}
+                                                    size={24}
+                                                    color={selectedParts.some(p => p.id === item.id) ? "#0FA37F" : "#666"}
+                                                />
+                                            </TouchableOpacity>
+                                        </View>
                                     )}
                                     <Icon
                                         name={expandedItems.includes(item.id) ? "expand-less" : "expand-more"}
@@ -475,42 +545,80 @@ const SePartsDetails = () => {
 
                             {expandedItems.includes(item.id) && (
                                 <View style={styles.detailsContainer}>
-                                    <View style={styles.detailRow}>
-                                        <Text style={styles.detailLabel}>Requested Quantity:</Text>
-                                        <Text style={styles.detailValue}>{item.requested_quantity || "N/A"}</Text>
-                                    </View>
-                                    <View style={styles.detailRow}>
-                                        <Text style={styles.detailLabel}>Approved Quantity:</Text>
-                                        <Text style={styles.detailValue}>{item.approve_quantity}</Text>
-                                    </View>
-                                    <View style={styles.detailRow}>
-                                        <Text style={styles.detailLabel}>Already Released:</Text>
-                                        <Text style={styles.detailValue}>{item.already_released}</Text>
-                                    </View>
-                                    <View style={styles.detailRow}>
-                                        <Text style={styles.detailLabel}>Consumed Quantity:</Text>
-                                        <Text style={styles.detailValue}>{item.comsumed_quantity !== null ? item.comsumed_quantity : "N/A"}</Text>
-                                    </View>
-                                    <View style={styles.detailRow}>
-                                        <Text style={styles.detailLabel}>Installed Quantity:</Text>
-                                        <Text style={styles.detailValue}>{item.install_quantity !== null ? item.install_quantity : "0"}</Text>
-                                    </View>
-                                    <View style={styles.detailRow}>
-                                        <Text style={styles.detailLabel}>Requested Date:</Text>
-                                        <Text style={styles.detailValue}>
-                                            {new Date(item.requested_date).toLocaleDateString()}
-                                        </Text>
-                                    </View>
-                                    <View style={styles.detailRow}>
-                                        <Text style={styles.detailLabel}>Part Inventory ID:</Text>
-                                        <Text style={styles.detailValue}>{item.part_inventory_id || "N/A"}</Text>
-                                    </View>
-                                    <View style={styles.detailRow}>
-                                        <Text style={styles.detailLabel}>Install Status:</Text>
-                                        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item) }]}>
-                                            <Text style={styles.statusText}>{getStatusText(item)}</Text>
-                                        </View>
-                                    </View>
+                                    {/* For removal parts, show only specific fields */}
+                                    {item.is_removal_part ? (
+                                        <>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>Remove Date:</Text>
+                                                <Text style={styles.detailValue}>
+                                                    {item.remove_date ? new Date(item.remove_date).toLocaleDateString() : "N/A"}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>Remove Quantity:</Text>
+                                                <Text style={styles.detailValue}>
+                                                    {item.remove_quantity !== null ? item.remove_quantity : "N/A"}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>Install Status:</Text>
+                                                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item) }]}>
+                                                    <Text style={styles.statusText}>{getStatusText(item)}</Text>
+                                                </View>
+                                            </View>
+                                        </>
+                                    ) : (
+                                        /* For non-removal parts, show all the original fields */
+                                        <>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>Requested Quantity:</Text>
+                                                <Text style={styles.detailValue}>{item.requested_quantity || "N/A"}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>Approved Quantity:</Text>
+                                                <Text style={styles.detailValue}>{item.approve_quantity}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>Already Released:</Text>
+                                                <Text style={styles.detailValue}>{item.already_released}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>Consumed Quantity:</Text>
+                                                <Text style={styles.detailValue}>{item.comsumed_quantity !== null ? item.comsumed_quantity : "N/A"}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>Available Wallet:</Text>
+                                                <Text style={[styles.detailValue, 
+                                                    { color: hasAvailableWallet(item) ? '#0FA37F' : '#dc3545', fontWeight: '600' }]}>
+                                                    {getAvailableWallet(item)}
+                                                </Text>
+                                            </View>
+                                            {item.install_quantity !== null && item.install_quantity > 0 && (
+                                                <View style={styles.detailRow}>
+                                                    <Text style={styles.detailLabel}>Already Installed:</Text>
+                                                    <Text style={[styles.detailValue, { color: '#2196F3' }]}>
+                                                        {item.install_quantity}
+                                                    </Text>
+                                                </View>
+                                            )}
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>Requested Date:</Text>
+                                                <Text style={styles.detailValue}>
+                                                    {new Date(item.requested_date).toLocaleDateString()}
+                                                </Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>Part Inventory ID:</Text>
+                                                <Text style={styles.detailValue}>{item.part_inventory_id || "N/A"}</Text>
+                                            </View>
+                                            <View style={styles.detailRow}>
+                                                <Text style={styles.detailLabel}>Install Status:</Text>
+                                                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item) }]}>
+                                                    <Text style={styles.statusText}>{getStatusText(item)}</Text>
+                                                </View>
+                                            </View>
+                                        </>
+                                    )}
                                 </View>
                             )}
                         </View>
@@ -563,35 +671,50 @@ const SePartsDetails = () => {
                             data={selectedParts}
                             keyExtractor={(item) => item.id.toString()}
                             renderItem={({ item }) => {
-                                const currentQuantity = parseInt(quantityInputs[item.id] || "1");
-                                const maxQuantity = item.approve_quantity;
+                                const currentQuantityStr = quantityInputs[item.id] || "";
+                                const currentQuantity = currentQuantityStr ? parseInt(currentQuantityStr) : 0;
+                                const maxQuantity = Math.min(item.approve_quantity, getAvailableWallet(item));
+                                const availableWallet = getAvailableWallet(item);
+                                const isQuantityValid = currentQuantity >= 1 && 
+                                                       currentQuantity <= item.approve_quantity && 
+                                                       currentQuantity <= availableWallet;
 
                                 return (
                                     <View style={styles.drawerPartItem}>
                                         <View style={styles.drawerPartInfo}>
                                             <Text style={styles.drawerPartNo}>{item.part_no}</Text>
-                                            <Text style={styles.drawerApprovedQty}>Approved: {maxQuantity}</Text>
+                                            <Text style={styles.drawerApprovedQty}>Approved: {item.approve_quantity}</Text>
+                                            <Text style={styles.drawerWalletQty}>Available Wallet: {availableWallet}</Text>
+                                            {item.install_quantity !== null && item.install_quantity > 0 && (
+                                                <Text style={styles.drawerInstalledQty}>Already Installed: {item.install_quantity}</Text>
+                                            )}
                                         </View>
 
                                         <View style={styles.quantityContainer}>
                                             <TouchableOpacity
                                                 style={[
                                                     styles.quantityButton,
-                                                    currentQuantity <= 1 && styles.quantityButtonDisabled
+                                                    (currentQuantity <= 1 || !currentQuantityStr) && styles.quantityButtonDisabled
                                                 ]}
                                                 onPress={() => {
                                                     if (currentQuantity > 1) {
                                                         handleQuantityChange(item.id, (currentQuantity - 1).toString());
+                                                    } else if (currentQuantityStr) {
+                                                        // If current quantity is 1, set to empty
+                                                        handleQuantityChange(item.id, "");
                                                     }
                                                 }}
-                                                disabled={currentQuantity <= 1}
+                                                disabled={currentQuantity <= 1 && !currentQuantityStr}
                                             >
-                                                <Icon name="remove" size={16} color={currentQuantity <= 1 ? "#ccc" : "#333"} />
+                                                <Icon name="remove" size={16} color={(currentQuantity <= 1 || !currentQuantityStr) ? "#ccc" : "#333"} />
                                             </TouchableOpacity>
 
                                             <TextInput
-                                                style={styles.quantityInput}
-                                                value={quantityInputs[item.id] || "1"}
+                                                style={[
+                                                    styles.quantityInput,
+                                                    !isQuantityValid && currentQuantityStr && styles.quantityInputError
+                                                ]}
+                                                value={quantityInputs[item.id] || ""}
                                                 onChangeText={(text) => handleQuantityChange(item.id, text)}
                                                 keyboardType="numeric"
                                                 placeholder="Qty"
@@ -606,6 +729,9 @@ const SePartsDetails = () => {
                                                 onPress={() => {
                                                     if (currentQuantity < maxQuantity) {
                                                         handleQuantityChange(item.id, (currentQuantity + 1).toString());
+                                                    } else if (!currentQuantityStr) {
+                                                        // If empty, start with 1
+                                                        handleQuantityChange(item.id, "1");
                                                     }
                                                 }}
                                                 disabled={currentQuantity >= maxQuantity}
@@ -627,9 +753,13 @@ const SePartsDetails = () => {
                                 <Text style={styles.drawerButtonText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
-                                style={[styles.drawerButton, styles.submitButton, installing && styles.submitButtonDisabled]}
+                                style={[
+                                    styles.drawerButton, 
+                                    styles.submitButton, 
+                                    (!areAllQuantitiesValid() || installing) && styles.submitButtonDisabled
+                                ]}
                                 onPress={handleInstallSubmit}
-                                disabled={installing}
+                                disabled={!areAllQuantitiesValid() || installing}
                             >
                                 {installing ? (
                                     <ActivityIndicator size="small" color="#fff" />
@@ -818,6 +948,7 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         alignItems: "center",
         marginBottom: 5,
+        flexWrap: "wrap",
     },
     statusIcon: {
         marginRight: 8,
@@ -825,8 +956,37 @@ const styles = StyleSheet.create({
     partNo: {
         fontSize: 16,
         fontWeight: "600",
+        marginRight: 10,
+    },
+    walletBadge: {
+        backgroundColor: '#e8f5e8',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+        marginLeft: 5,
+    },
+    walletBadgeText: {
+        fontSize: 12,
+        color: '#0FA37F',
+        fontWeight: '500',
+    },
+    installedBadge: {
+        backgroundColor: '#e3f2fd',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+        marginLeft: 5,
+    },
+    installedBadgeText: {
+        fontSize: 12,
+        color: '#2196F3',
+        fontWeight: '500',
     },
     headerRightActions: {
+        flexDirection: "row",
+        alignItems: "center",
+    },
+    checkboxWrapper: {
         flexDirection: "row",
         alignItems: "center",
     },
@@ -946,6 +1106,18 @@ const styles = StyleSheet.create({
         color: "#666",
         marginTop: 2,
     },
+    drawerWalletQty: {
+        fontSize: 12,
+        color: "#0FA37F",
+        marginTop: 2,
+        fontWeight: "500",
+    },
+    drawerInstalledQty: {
+        fontSize: 12,
+        color: "#2196F3",
+        marginTop: 2,
+        fontWeight: "500",
+    },
     drawerButtons: {
         flexDirection: "row",
         justifyContent: "space-between",
@@ -970,7 +1142,6 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontWeight: "600",
     },
-
     quantityContainer: {
         flexDirection: "row",
         alignItems: "center",
@@ -997,6 +1168,10 @@ const styles = StyleSheet.create({
         textAlign: "center",
         fontSize: 16,
         marginHorizontal: 5,
+    },
+    quantityInputError: {
+        borderColor: "#dc3545",
+        backgroundColor: "#fff5f5",
     },
 });
 

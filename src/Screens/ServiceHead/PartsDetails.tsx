@@ -59,6 +59,7 @@ const PartsDetails = ({ navigation, route }: any) => {
             // Prepare all parts data - FILTERED by maintenanceId
             const allParts: any[] = [];
 
+            // In the loadPartsData function, update the part creation:
             serviceSalePersons.forEach((person: any) => {
                 if (person.wallet && person.wallet.length > 0) {
                     person.wallet.forEach((item: any, index: number) => {
@@ -72,7 +73,9 @@ const PartsDetails = ({ navigation, route }: any) => {
                                 date: item.requested_date ?
                                     new Date(item.requested_date).toLocaleDateString('en-GB').split('/').join('-') : "N/A",
                                 status: item.is_approved ? "approved" : "requested",
-                                quantity: item.approve_quantity || item.requested_quantity || 1,
+                                requestedQuantity: item.requested_quantity || 1, // Add requested quantity
+                                approvedQuantity: item.approve_quantity || null, // Add approved quantity
+                                quantity: item.is_approved ? item.approve_quantity : item.requested_quantity, // Keep for compatibility
                                 originalData: item,
                                 isSelected: false
                             });
@@ -180,16 +183,16 @@ const PartsDetails = ({ navigation, route }: any) => {
         try {
             // VALIDATION: Check for invalid quantities before submitting
             const invalidParts: string[] = [];
-            
+
             selectedParts.forEach(part => {
                 const inputValue = approveQuantities[part.id];
                 const approvedQty = inputValue ? parseInt(inputValue) : 0;
                 const requestedQty = part.quantity;
-                
+
                 // Check for empty or 0 value
                 if (!inputValue || inputValue.trim() === '' || approvedQty === 0) {
                     invalidParts.push(`${part.partNo} - Cannot approve 0 or empty quantity`);
-                } 
+                }
                 // Check for value greater than requested quantity
                 else if (approvedQty > requestedQty) {
                     invalidParts.push(`${part.partNo} - Approved quantity (${approvedQty}) exceeds requested quantity (${requestedQty})`);
@@ -315,10 +318,10 @@ const PartsDetails = ({ navigation, route }: any) => {
     const allPartsHaveValidQuantities = selectedParts.every(part => {
         const inputValue = approveQuantities[part.id];
         if (!inputValue || inputValue.trim() === '') return false;
-        
+
         const quantity = parseInt(inputValue);
         const requestedQty = part.quantity;
-        
+
         return quantity > 0 && quantity <= requestedQty;
     });
 
@@ -369,7 +372,20 @@ const PartsDetails = ({ navigation, route }: any) => {
                     <Text style={styles.partLabel}>Part No.</Text>
                     <Text style={styles.partNumber}>{item.partNo}</Text>
                     <Text style={styles.requestedBy}>Requested By: {item.requestedBy}</Text>
-                    <Text style={styles.quantityText}>Qty: {item.quantity}</Text>
+
+                    {/* Show different quantity info based on status */}
+                    {item.status === "approved" ? (
+                        <View style={styles.quantityContainer}>
+                            <Text style={styles.quantityText}>
+                                Requested: <Text style={styles.quantityValue}>{item.requestedQuantity}</Text>
+                            </Text>
+                            <Text style={styles.quantityText}>
+                                Approved: <Text style={styles.approvedQuantityValue}>{item.approvedQuantity}</Text>
+                            </Text>
+                        </View>
+                    ) : (
+                        <Text style={styles.quantityText}>Qty: {item.quantity}</Text>
+                    )}
                 </View>
                 <View style={styles.statusContainer}>
                     <TouchableOpacity style={[styles.statusButton, getStatusButtonStyle(item.status)]}>
@@ -997,6 +1013,20 @@ const styles = StyleSheet.create({
     disabledButton: {
         backgroundColor: "#CCCCCC",
         opacity: 0.6,
+    },
+    quantityContainer: {
+        marginTop: 4,
+    },
+
+    quantityValue: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: "#1A1D29",
+    },
+    approvedQuantityValue: {
+        fontSize: 12,
+        fontWeight: "600",
+        color: "#00BFA5", // Green color for approved quantity
     },
 });
 
