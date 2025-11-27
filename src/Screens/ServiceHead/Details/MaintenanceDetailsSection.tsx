@@ -19,7 +19,7 @@ interface MaintenanceDetailsSectionProps {
 
 const MaintenanceDetailsSection = ({ maintenance }: MaintenanceDetailsSectionProps) => {
 
-    console.log("Maintenance Details::::::::::::::::::::::::::::", maintenance);
+    // console.log("Maintenance Details::::::::::::::::::::::::::::", maintenance);
     return (
         <View style={styles.section}>
             <Text style={styles.sectionTitle}>Maintenance Details</Text>

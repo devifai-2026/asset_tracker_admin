@@ -172,7 +172,8 @@ const PartsDetails = ({ navigation, route }: any) => {
         // Initialize quantity values for selected parts with minimum 1
         const newQuantities = { ...approveQuantities };
         if (!item.isSelected) {
-            newQuantities[item.id] = item.quantity.toString();
+            // Use requestedQuantity if available, otherwise fall back to quantity
+            newQuantities[item.id] = (item.requestedQuantity || item.quantity).toString();
         } else {
             delete newQuantities[item.id];
         }
@@ -187,7 +188,7 @@ const PartsDetails = ({ navigation, route }: any) => {
             selectedParts.forEach(part => {
                 const inputValue = approveQuantities[part.id];
                 const approvedQty = inputValue ? parseInt(inputValue) : 0;
-                const requestedQty = part.quantity;
+                const requestedQty = part.requestedQuantity || part.quantity;
 
                 // Check for empty or 0 value
                 if (!inputValue || inputValue.trim() === '' || approvedQty === 0) {
@@ -213,12 +214,25 @@ const PartsDetails = ({ navigation, route }: any) => {
                 return;
             }
 
-            const approvalPayload = selectedParts.map(part => ({
-                id: parseInt(part.originalData.id),
-                maintenance_id: part.originalData.maintenance_id,
-                approved_quantity: parseInt(approveQuantities[part.id]),
-                is_approved: true
-            }));
+            // CORRECTED PAYLOAD STRUCTURE
+            const approvalPayload = selectedParts.map(part => {
+                const approvedQuantity = parseInt(approveQuantities[part.id]);
+
+                return {
+                    id: part.originalData.id, // Use the wallet item ID
+                    part_inventory_id: part.originalData.part_inventory_id,
+                    maintenance_id: part.originalData.maintenance_id,
+                    approved_quantity: approvedQuantity,
+                    is_approved: true,
+                    // Include other required fields from your API response
+                    part_no: part.partNo,
+                    requested_quantity: part.requestedQuantity || part.quantity,
+                    in_stock_quantity: part.originalData?.in_stock_quantity || "0",
+                    is_local_part: part.originalData?.is_local_part || false
+                };
+            });
+
+            console.log("Approval Payload:", approvalPayload);
 
             const response = await maintenanceApi.approvePartsRequest(approvalPayload);
 
@@ -226,13 +240,16 @@ const PartsDetails = ({ navigation, route }: any) => {
                 if (maintenanceId) {
                     dispatch(fetchMaintenanceDetailNew(maintenanceId) as any);
                 }
+
                 // IMMEDIATE FRONTEND UPDATE - Real-time change
                 const updatedParts = partsData.map(part => {
                     if (part.isSelected) {
+                        const approvedQty = parseInt(approveQuantities[part.id]);
                         return {
                             ...part,
                             status: "approved",
-                            quantity: parseInt(approveQuantities[part.id]),
+                            approvedQuantity: approvedQty,
+                            quantity: approvedQty, // For compatibility
                             isSelected: false
                         };
                     }
@@ -243,7 +260,7 @@ const PartsDetails = ({ navigation, route }: any) => {
                 setSelectedParts([]);
                 setApproveQuantities({});
                 setShowApproveDrawer(false);
-                navigation.goBack();
+
                 Alert.alert("Success", "Parts approved successfully");
             } else {
                 Alert.alert("Error", "Failed to approve parts");
@@ -279,7 +296,7 @@ const PartsDetails = ({ navigation, route }: any) => {
         const currentValue = approveQuantities[partId];
         const currentQty = currentValue ? parseInt(currentValue) : 0;
         const part = selectedParts.find(p => p.id === partId);
-        const requestedQty = part?.quantity || 1;
+        const requestedQty = part?.requestedQuantity || part?.quantity || 1;
 
         if (currentQty < requestedQty) {
             setApproveQuantities({

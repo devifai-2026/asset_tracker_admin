@@ -67,6 +67,9 @@ const AcceptAssetDetails = () => {
     }
   }, [ticket?.id, dispatch]);
 
+
+  console.log("maindetails",maintenanceDetail)
+
   // Use useFocusEffect to refresh data when screen comes into focus
   useFocusEffect(
     useCallback(() => {
@@ -515,7 +518,6 @@ const AcceptAssetDetails = () => {
     photos = []
   } = maintenanceDetail;
 
-  console.log("Maintenance Detail::::::::::::::::::::::::::::::", maintenanceDetail);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -686,6 +688,31 @@ const AcceptAssetDetails = () => {
             accessibilityRole="button"
           >
             <Text style={styles.cardTitle}>Parts Details</Text>
+            <Icon name="chevron-right" size={20} color="#666" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.accordionHeader}
+            onPress={() => {
+              if (maintenanceDetail?.id) {
+                navigation.navigate("SePartsDetailsTwo", {
+                  maintenanceId: maintenanceDetail.id,
+                  parts: maintenanceDetail.parts || [] // Pass the parts data
+                });
+              } else {
+                Alert.alert("Error", "Maintenance ID not available");
+              }
+            }}
+            accessible={true}
+            accessibilityLabel="View parts details"
+            accessibilityRole="button"
+          >
+            <View style={styles.partsHeader}>
+              <Text style={styles.cardTitle}>Parts</Text>
+              <Text style={styles.partsCount}>
+                {parts?.length || 0} part{parts?.length !== 1 ? 's' : ''}
+              </Text>
+            </View>
             <Icon name="chevron-right" size={20} color="#666" />
           </TouchableOpacity>
 
@@ -1322,6 +1349,19 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  partsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  partsCount: {
+    fontSize: 12,
+    color: '#666',
+    marginLeft: 8,
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
 });
 

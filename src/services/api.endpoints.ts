@@ -29,7 +29,7 @@ export const APIEndpoints = {
   getAllInventoryPart: '/sale-service/get-all-inventory-part',
   getAllInventoryPartAdmin: '/maintenance/get-all-inventory-part',
   searchParts: '/sale-service/search-part-inventory',
-  approvePartsRequest: 'maintenance/edit-aproval-list',
+  approvePartsRequest: '/maintenance/edit-aproval-list',
   assignParts: 'maintenance/assign-part',
 
   // Local purchase

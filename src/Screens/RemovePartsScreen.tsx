@@ -175,6 +175,16 @@ const RemovePartsScreen = () => {
                 return;
             }
 
+            const invalidParts = partsToRemove.filter(part => {
+                const quantity = parseInt(part.quantity);
+                return isNaN(quantity) || quantity < 1;
+            });
+
+            if (invalidParts.length > 0) {
+                Alert.alert("Error", "Quantity cannot be 0 or empty. Please enter valid quantity.");
+                return;
+            }
+
             // Clean up the payload to match the required structure
             const cleanPayload = partsToRemove.map(part => {
                 // Ensure part_id is always a single number, not an array
@@ -260,8 +270,8 @@ const RemovePartsScreen = () => {
             <View style={styles.stickyHeader}>
                 <Header />
             </View>
-            
-            <KeyboardAvoidingView 
+
+            <KeyboardAvoidingView
                 style={styles.container}
                 behavior={Platform.OS === "ios" ? "padding" : "height"}
                 keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
@@ -289,8 +299,8 @@ const RemovePartsScreen = () => {
                     {searchQuery && (
                         <View style={styles.searchInfo}>
                             <Text style={styles.searchInfoText}>
-                                {searchLoading ? 
-                                    "Searching..." : 
+                                {searchLoading ?
+                                    "Searching..." :
                                     `Found ${searchedParts?.length} results for "${searchQuery}"`
                                 }
                             </Text>

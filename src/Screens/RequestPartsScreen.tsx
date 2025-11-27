@@ -239,6 +239,16 @@ const RequestPartsScreen = () => {
                 return;
             }
 
+            const invalidParts = partsToRequest.filter(part => {
+                const quantity = parseInt(part.quantity);
+                return isNaN(quantity) || quantity < 1;
+            });
+
+            if (invalidParts.length > 0) {
+                Alert.alert("Error", "Quantity cannot be 0 or empty. Please enter valid quantity.");
+                return;
+            }
+
             const cleanPayload = partsToRequest.map(part => ({
                 quantity: part.quantity,
                 part_no: part.part_no || "",
@@ -249,7 +259,6 @@ const RequestPartsScreen = () => {
 
             if (requestParts.fulfilled.match(result)) {
                 Alert.alert("Success", "Parts requested successfully");
-                // Call the callback to refresh data in parent
                 if (onGoBack) {
                     onGoBack();
                 }
@@ -267,14 +276,20 @@ const RequestPartsScreen = () => {
                 Alert.alert("Error", "Please fill all required fields for local purchase items");
                 return;
             }
+
+            const quantity = parseInt(item.quantity);
+            if (isNaN(quantity) || quantity < 1) {
+                Alert.alert("Error", "Quantity cannot be 0 or empty. Please enter valid quantity.");
+                return;
+            }
         }
 
         try {
             for (const item of localPurchaseItems) {
                 const localPurchaseData = {
                     part_no: item.part_no,
-                    part_name: item.part_no, // Using part_no as part_name since we removed part_name field
-                    part_description: "", // Empty since description removed
+                    part_name: item.part_no,
+                    part_description: "",
                     quantity: parseInt(item.quantity) || 0,
                     price: parseFloat(item.price_per_unit) || 0,
                     maintenance_id: routeMaintenanceId,
@@ -309,6 +324,7 @@ const RequestPartsScreen = () => {
             Alert.alert("Error", error.message || "Failed to submit local purchase");
         }
     };
+
 
     const handleSubmit = async () => {
         const partsToRequest = Object.values(selectedParts);
@@ -656,7 +672,7 @@ const styles = StyleSheet.create({
         flexGrow: 1,
         justifyContent: 'center',
     },
-   
+
     loader: {
         marginTop: 50
     },
@@ -766,7 +782,7 @@ const styles = StyleSheet.create({
     modalCloseButton: {
         padding: 5
     },
-     modalBody: {
+    modalBody: {
         maxHeight: SCREEN_HEIGHT * 0.5, // Reduced height
     },
     modalBodyContent: {
@@ -795,7 +811,7 @@ const styles = StyleSheet.create({
         color: "#fff",
         fontWeight: "600"
     },
-     localPurchaseItem: {
+    localPurchaseItem: {
         marginBottom: 20,
         padding: 15,
         borderWidth: 1,
@@ -803,7 +819,7 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         backgroundColor: "#fafafa"
     },
-     inputLabel: {
+    inputLabel: {
         fontSize: 14,
         fontWeight: "600",
         color: "#333",
@@ -848,7 +864,7 @@ const styles = StyleSheet.create({
     removeItemButton: {
         padding: 5
     },
-    
+
     addItemButton: {
         flexDirection: "row",
         alignItems: "center",

@@ -125,7 +125,7 @@ const SePartsDetails = () => {
         } else {
             const availableWallet = getAvailableWallet(part);
             const initialQuantity = Math.min(1, availableWallet); // Start with 1 or available wallet, whichever is smaller
-            
+
             setSelectedParts([...selectedParts, part]);
             setQuantityInputs({
                 ...quantityInputs,
@@ -171,13 +171,13 @@ const SePartsDetails = () => {
             if (!quantityStr || quantityStr.trim() === "") {
                 return false; // Empty input is invalid
             }
-            
+
             const quantity = parseInt(quantityStr);
             const availableWallet = getAvailableWallet(part);
-            
-            return quantity >= 1 && 
-                   quantity <= part.approve_quantity && 
-                   quantity <= availableWallet;
+
+            return quantity >= 1 &&
+                quantity <= part.approve_quantity &&
+                quantity <= availableWallet;
         });
     };
 
@@ -199,7 +199,7 @@ const SePartsDetails = () => {
         for (const part of selectedParts) {
             const quantity = parseInt(quantityInputs[part.id]);
             const availableWallet = getAvailableWallet(part);
-            
+
             if (quantity <= 0) {
                 Alert.alert("Error", `Please enter a valid quantity for part ${part.part_no}`);
                 return;
@@ -210,7 +210,7 @@ const SePartsDetails = () => {
             }
             if (quantity > availableWallet) {
                 Alert.alert(
-                    "Insufficient Wallet", 
+                    "Insufficient Wallet",
                     `Available wallet for ${part.part_no} is ${availableWallet}. You cannot install ${quantity} units.`
                 );
                 return;
@@ -284,6 +284,14 @@ const SePartsDetails = () => {
         }
     });
 
+    // Helper function to get status text
+    const getStatusText = (part: WalletPart) => {
+        if (part.install_quantity !== null && part.install_quantity > 0) return "Installed";
+        if (part.is_approved) return "Approved";
+        if (part.is_removal_part) return "Removal Part";
+        return "Pending Approval";
+    };
+
     // Filter parts based on search query and other filters
     const filteredParts = (walletParts || [])
         .filter(part => {
@@ -292,18 +300,14 @@ const SePartsDetails = () => {
         })
         .filter(part => {
             switch (filter) {
-                case "installed":
-                    return part.install_quantity !== null && part.install_quantity > 0;
-                case "removed":
-                    return part.is_removal_part;
                 case "approved":
-                    return part.is_approved;
+                    return part.is_approved && !part.is_removal_part; // Exclude removal parts from approved
                 case "pending":
-                    return !part.is_approved;
+                    return !part.is_approved && !part.is_removal_part; // Exclude removal parts from pending
                 case "with_wallet":
-                    return hasAvailableWallet(part) && !part.is_removal_part;
+                    return hasAvailableWallet(part) && !part.is_removal_part; // Already excludes removal parts
                 default:
-                    return true;
+                    return !part.is_removal_part; // Exclude removal parts from "all" filter
             }
         })
         .filter(part => {
@@ -322,13 +326,6 @@ const SePartsDetails = () => {
         if (part.is_approved) return "#0FA37F"; // Green for approved
         if (part.is_removal_part) return "#dc3545"; // Red for removal
         return "#f7b267"; // Orange for pending
-    };
-
-    const getStatusText = (part: WalletPart) => {
-        if (part.install_quantity !== null && part.install_quantity > 0) return "Installed";
-        if (part.is_approved) return "Approved";
-        if (part.is_removal_part) return "Removal Part";
-        return "Pending Approval";
     };
 
     const getStatusIcon = (part: WalletPart) => {
@@ -443,18 +440,6 @@ const SePartsDetails = () => {
                             onPress={() => setFilter("all")}
                         >
                             <Text style={[styles.filterText, filter === "all" && styles.filterTextActive]}>All Parts</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.filterButton, filter === "installed" && styles.filterButtonActive]}
-                            onPress={() => setFilter("installed")}
-                        >
-                            <Text style={[styles.filterText, filter === "installed" && styles.filterTextActive]}>Installed</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity
-                            style={[styles.filterButton, filter === "removed" && styles.filterButtonActive]}
-                            onPress={() => setFilter("removed")}
-                        >
-                            <Text style={[styles.filterText, filter === "removed" && styles.filterTextActive]}>Removed</Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                             style={[styles.filterButton, filter === "approved" && styles.filterButtonActive]}
@@ -588,8 +573,8 @@ const SePartsDetails = () => {
                                             </View>
                                             <View style={styles.detailRow}>
                                                 <Text style={styles.detailLabel}>Available Wallet:</Text>
-                                                <Text style={[styles.detailValue, 
-                                                    { color: hasAvailableWallet(item) ? '#0FA37F' : '#dc3545', fontWeight: '600' }]}>
+                                                <Text style={[styles.detailValue,
+                                                { color: hasAvailableWallet(item) ? '#0FA37F' : '#dc3545', fontWeight: '600' }]}>
                                                     {getAvailableWallet(item)}
                                                 </Text>
                                             </View>
@@ -675,9 +660,9 @@ const SePartsDetails = () => {
                                 const currentQuantity = currentQuantityStr ? parseInt(currentQuantityStr) : 0;
                                 const maxQuantity = Math.min(item.approve_quantity, getAvailableWallet(item));
                                 const availableWallet = getAvailableWallet(item);
-                                const isQuantityValid = currentQuantity >= 1 && 
-                                                       currentQuantity <= item.approve_quantity && 
-                                                       currentQuantity <= availableWallet;
+                                const isQuantityValid = currentQuantity >= 1 &&
+                                    currentQuantity <= item.approve_quantity &&
+                                    currentQuantity <= availableWallet;
 
                                 return (
                                     <View style={styles.drawerPartItem}>
@@ -754,8 +739,8 @@ const SePartsDetails = () => {
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={[
-                                    styles.drawerButton, 
-                                    styles.submitButton, 
+                                    styles.drawerButton,
+                                    styles.submitButton,
                                     (!areAllQuantitiesValid() || installing) && styles.submitButtonDisabled
                                 ]}
                                 onPress={handleInstallSubmit}

@@ -26,6 +26,7 @@ import AssetDetailsScreen from './Screens/ServiceHead/Details/AssetDetailsScreen
 import AddPartsScreen from './Screens/ServiceHead/AddPartsScreen';
 import WalletScreen from './Screens/ServiceHead/WalletScreen';
 import ForgotPassword from './Screens/ForgotPassword';
+import SePartsDetailsTwo from './Screens/SePartsDetailsTwo';
 
 const Stack = createNativeStackNavigator();
 
@@ -138,6 +139,11 @@ const AppNavigator = () => {
         name="AddParts"
         component={AddPartsScreen}
         options={{ title: 'Add Parts' }}
+      />
+      <Stack.Screen
+        name="SePartsDetailsTwo"
+        component={SePartsDetailsTwo}
+        options={{ title: "Parts Details" }}
       />
     </Stack.Navigator>
   );

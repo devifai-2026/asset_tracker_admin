@@ -9,6 +9,10 @@ import {
     ActivityIndicator,
     SafeAreaView,
     StatusBar,
+    Image,
+    Modal,
+    Dimensions,
+    Alert,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { useDispatch, useSelector } from "react-redux";
@@ -22,6 +26,8 @@ import {
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Header } from "./Header";
 
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
 const ClosedAssetDetails = () => {
     const route = useRoute();
     const navigation = useNavigation();
@@ -34,6 +40,11 @@ const ClosedAssetDetails = () => {
 
     const [showAsset, setShowAsset] = useState(false);
     const [showComments, setShowComments] = useState(false);
+
+    // Full screen image modal states
+    const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
+    const [showImageModal, setShowImageModal] = useState(false);
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
     useEffect(() => {
         if (ticket?.id) {
@@ -142,6 +153,34 @@ const ClosedAssetDetails = () => {
         }
     };
 
+    // Full Screen Image Handlers
+    const handleImagePress = (imageUri: string, index: number) => {
+        setSelectedImageUri(`https://${imageUri}`);
+        setCurrentImageIndex(index);
+        setShowImageModal(true);
+    };
+
+    const handleCloseImageModal = () => {
+        setShowImageModal(false);
+        setSelectedImageUri(null);
+    };
+
+    const handleNextImage = () => {
+        if (maintenanceDetail?.photos && maintenanceDetail.photos.length > 0) {
+            const nextIndex = (currentImageIndex + 1) % maintenanceDetail.photos.length;
+            setCurrentImageIndex(nextIndex);
+            setSelectedImageUri(`https://${maintenanceDetail.photos[nextIndex].image_uri}`);
+        }
+    };
+
+    const handlePrevImage = () => {
+        if (maintenanceDetail?.photos && maintenanceDetail.photos.length > 0) {
+            const prevIndex = (currentImageIndex - 1 + maintenanceDetail.photos.length) % maintenanceDetail.photos.length;
+            setCurrentImageIndex(prevIndex);
+            setSelectedImageUri(`https://${maintenanceDetail.photos[prevIndex].image_uri}`);
+        }
+    };
+
     if (loading) {
         return (
             <SafeAreaView style={styles.safeArea}>
@@ -193,7 +232,8 @@ const ClosedAssetDetails = () => {
         action_taken,
         parts,
         comments = [],
-        description
+        description,
+        photos = []
     } = maintenanceDetail;
 
     return (
@@ -276,6 +316,45 @@ const ClosedAssetDetails = () => {
                     </View>
                 </View>
 
+                {/* Attachments Section */}
+                <View style={styles.card}>
+                    <Text style={styles.cardTitle}>Attachments</Text>
+                    {photos && photos.length > 0 ? (
+                        <View style={styles.attachmentsContainer}>
+                            <Text style={styles.attachmentsCount}>
+                                {photos.length} photo{photos.length !== 1 ? 's' : ''} attached
+                            </Text>
+                            <ScrollView
+                                horizontal
+                                showsHorizontalScrollIndicator={false}
+                                style={styles.attachmentsScrollView}
+                            >
+                                <View style={styles.attachmentsRow}>
+                                    {photos.map((photo: any, index: number) => (
+                                        <TouchableOpacity
+                                            key={photo.id || index}
+                                            style={styles.attachmentItem}
+                                            onPress={() => handleImagePress(photo.image_uri, index)}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Image
+                                                source={{ uri: `https://${photo.image_uri}` }}
+                                                style={styles.attachmentImage}
+                                                resizeMode="cover"
+                                            />
+                                            <View style={styles.attachmentOverlay}>
+                                                <Icon name="remove-red-eye" size={20} color="#fff" />
+                                            </View>
+                                        </TouchableOpacity>
+                                    ))}
+                                </View>
+                            </ScrollView>
+                        </View>
+                    ) : (
+                        <Text style={styles.noAttachmentsText}>No attachments available</Text>
+                    )}
+                </View>
+
                 {/* Closure Details */}
                 {(clouser_comment || action_taken) && (
                     <View style={styles.card}>
@@ -288,12 +367,26 @@ const ClosedAssetDetails = () => {
                 {/* Parts Details */}
                 <TouchableOpacity
                     style={styles.accordionHeader}
-                    onPress={() => navigation.navigate("SePartsDetails", {
-                        maintenanceId: maintenanceDetail.id,
-                        status: maintenanceDetail.status
-                    })}
+                    onPress={() => {
+                        if (maintenanceDetail?.id) {
+                            navigation.navigate("SePartsDetailsTwo", {
+                                maintenanceId: maintenanceDetail.id,
+                                parts: maintenanceDetail.parts || [] // Pass the parts data
+                            });
+                        } else {
+                            Alert.alert("Error", "Maintenance ID not available");
+                        }
+                    }}
+                    accessible={true}
+                    accessibilityLabel="View parts details"
+                    accessibilityRole="button"
                 >
-                    <Text style={styles.accordionTitle}>Parts Details</Text>
+                    <View style={styles.partsHeader}>
+                        <Text style={styles.cardTitle}>Parts</Text>
+                        <Text style={styles.partsCount}>
+                            {parts?.length || 0} part{parts?.length !== 1 ? 's' : ''}
+                        </Text>
+                    </View>
                     <Icon name="chevron-right" size={20} color="#666" />
                 </TouchableOpacity>
 
@@ -352,7 +445,7 @@ const ClosedAssetDetails = () => {
                                         {/* Visit Date if available */}
                                         {commentItem.visit_date && (
                                             <View style={styles.visitDateContainer}>
-                                                <Icon name="calendar-clock" size={16} color="#666" />
+                                                <Icon name="calendar-today" size={16} color="#666" />
                                                 <Text style={styles.visitDate}>
                                                     Visit Date: {formatDate(commentItem.visit_date)}
                                                 </Text>
@@ -365,6 +458,62 @@ const ClosedAssetDetails = () => {
                     </View>
                 )}
             </ScrollView>
+
+            {/* Full Screen Image Modal */}
+            <Modal
+                visible={showImageModal}
+                transparent={true}
+                animationType="fade"
+                onRequestClose={handleCloseImageModal}
+                statusBarTranslucent={true}
+            >
+                <View style={styles.fullScreenModal}>
+                    {/* Close Button */}
+                    <TouchableOpacity
+                        style={styles.modalCloseButton}
+                        onPress={handleCloseImageModal}
+                    >
+                        <Icon name="close" size={30} color="#fff" />
+                    </TouchableOpacity>
+
+                    {/* Navigation Arrows for multiple images */}
+                    {photos.length > 1 && (
+                        <>
+                            <TouchableOpacity
+                                style={[styles.navButton, styles.prevButton]}
+                                onPress={handlePrevImage}
+                            >
+                                <Icon name="chevron-left" size={30} color="#fff" />
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[styles.navButton, styles.nextButton]}
+                                onPress={handleNextImage}
+                            >
+                                <Icon name="chevron-right" size={30} color="#fff" />
+                            </TouchableOpacity>
+                        </>
+                    )}
+
+                    {/* Image */}
+                    {selectedImageUri && (
+                        <Image
+                            source={{ uri: selectedImageUri }}
+                            style={styles.fullScreenImage}
+                            resizeMode="contain"
+                        />
+                    )}
+
+                    {/* Image Counter */}
+                    {photos.length > 1 && (
+                        <View style={styles.imageCounter}>
+                            <Text style={styles.imageCounterText}>
+                                {currentImageIndex + 1} / {photos.length}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+            </Modal>
         </SafeAreaView>
     );
 };
@@ -509,6 +658,53 @@ const styles = StyleSheet.create({
         backgroundColor: "#6c757d",
     },
 
+    // Attachments Section Styles
+    attachmentsContainer: {
+        marginTop: 10,
+    },
+    attachmentsCount: {
+        fontSize: 14,
+        color: "#666",
+        marginBottom: 10,
+        fontFamily: 'Inter-Regular',
+    },
+    attachmentsScrollView: {
+        flexGrow: 0,
+    },
+    attachmentsRow: {
+        flexDirection: "row",
+        gap: 12,
+    },
+    attachmentItem: {
+        position: 'relative',
+        width: 100,
+        height: 100,
+        borderRadius: 8,
+        overflow: 'hidden',
+    },
+    attachmentImage: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 8,
+    },
+    attachmentOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.3)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    noAttachmentsText: {
+        textAlign: "center",
+        color: "#666",
+        fontStyle: "italic",
+        marginVertical: 10,
+        fontFamily: 'Inter-Regular',
+    },
+
     // Comment Section Styles
     commentsContainer: {
         marginTop: 10,
@@ -632,6 +828,76 @@ const styles = StyleSheet.create({
         color: "#333",
         lineHeight: 20,
         fontFamily: 'Inter-Regular',
+    },
+
+    partsHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    partsCount: {
+        fontSize: 12,
+        color: '#666',
+        marginLeft: 8,
+        backgroundColor: '#f0f0f0',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 10,
+        fontFamily: 'Inter-Regular',
+    },
+
+    // Full Screen Image Modal Styles
+    fullScreenModal: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.95)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    modalCloseButton: {
+        position: 'absolute',
+        top: Platform.OS === 'ios' ? 60 : 40,
+        right: 20,
+        zIndex: 1000,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        borderRadius: 20,
+        width: 40,
+        height: 40,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    fullScreenImage: {
+        width: screenWidth,
+        height: screenHeight,
+    },
+    navButton: {
+        position: 'absolute',
+        top: '50%',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        borderRadius: 25,
+        width: 50,
+        height: 50,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+    },
+    prevButton: {
+        left: 20,
+    },
+    nextButton: {
+        right: 20,
+    },
+    imageCounter: {
+        position: 'absolute',
+        bottom: 40,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+    },
+    imageCounterText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '600',
+        fontFamily: 'Inter-SemiBold',
     },
 });
 
