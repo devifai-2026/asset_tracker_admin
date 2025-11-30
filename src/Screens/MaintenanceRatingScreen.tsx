@@ -81,33 +81,44 @@ const MaintenanceRatingScreen = () => {
         try {
             setLoading(true);
             const isPreventive = types === "preventive_maintenance";
+
+            // Use proper endpoint construction
             const endpoint = `/sale-service/get-maintenance-pmc-rate?s=1&preventive=${isPreventive ? 1 : 0}`;
 
+            console.log("Fetching from endpoint:", endpoint);
             const response = await authClient.get(endpoint);
             const data: ApiResponse = response.data || {};
+
+            console.log("API Response Data:", data);
 
             // Extract categories from API response
             let categories: RatingCategory[] = [];
 
             if (isPreventive) {
-                // For preventive maintenance
+                // For preventive maintenance - get both DC and IC preventive categories
                 if (data["DC Machine Preventive"]) {
+                    console.log("Found DC Machine Preventive:", data["DC Machine Preventive"].length);
                     categories = [...categories, ...data["DC Machine Preventive"]];
                 }
                 if (data["IC Machine Preventive"]) {
+                    console.log("Found IC Machine Preventive:", data["IC Machine Preventive"].length);
                     categories = [...categories, ...data["IC Machine Preventive"]];
                 }
             } else {
                 // For non-preventive maintenance
                 if (data["DC Machine"]) {
+                    console.log("Found DC Machine:", data["DC Machine"].length);
                     categories = [...categories, ...data["DC Machine"]];
                 }
                 if (data["IC Machine"]) {
+                    console.log("Found IC Machine:", data["IC Machine"].length);
                     categories = [...categories, ...data["IC Machine"]];
                 }
             }
 
+            console.log("Total categories loaded:", categories.length);
             setAllCategories(categories);
+
         } catch (error) {
             console.error("Failed to fetch rating categories:", error);
             Alert.alert("Error", "Failed to load rating categories");
@@ -119,23 +130,35 @@ const MaintenanceRatingScreen = () => {
     const filterCategoriesByType = () => {
         let filtered: RatingCategory[] = [];
 
-        // First filter by machine type
-        const machineFiltered = allCategories.filter(category => 
-            category.form_name === selectedMachineType
+        const isPreventive = types === "preventive_maintenance";
+
+        // Determine the expected form_name based on maintenance type and machine type
+        const expectedFormName = isPreventive
+            ? `${selectedMachineType} Preventive`
+            : selectedMachineType;
+
+        console.log(`Filtering for: ${expectedFormName}, Preventive: ${isPreventive}`);
+
+        // Filter categories by form_name
+        const machineFiltered = allCategories.filter(category =>
+            category.form_name === expectedFormName
         );
 
-        if (types === "preventive_maintenance") {
-            // Show only categories with sub_value (non-empty arrays)
+        console.log(`Categories after machine filter: ${machineFiltered.length}`);
+
+        if (isPreventive) {
+            // For preventive maintenance - show categories that have sub_values
             filtered = machineFiltered.filter(category =>
                 category.sub_value && category.sub_value.length > 0
             );
         } else {
-            // Show only categories with empty sub_value arrays
+            // For non-preventive maintenance - show categories without sub_values
             filtered = machineFiltered.filter(category =>
                 !category.sub_value || category.sub_value.length === 0
             );
         }
 
+        console.log(`Final filtered categories: ${filtered.length}`);
         setFilteredCategories(filtered);
 
         // Initialize ratings for filtered categories
@@ -156,7 +179,9 @@ const MaintenanceRatingScreen = () => {
 
             return ratingData;
         });
+
         setRatings(initialRatings);
+        setCurrentPage(1); // Reset to first page when filter changes
     };
 
     const setCategoryRating = (categoryId: number, rating: number) => {
@@ -239,7 +264,6 @@ const MaintenanceRatingScreen = () => {
                         id: sub.id,
                         percentage: sub.percentage,
                         rating: sub.rating
-                        // Remove titel field
                     }));
 
                     return {
@@ -343,7 +367,7 @@ const MaintenanceRatingScreen = () => {
                 <Header />
             </View>
 
-            <ScrollView 
+            <ScrollView
                 style={styles.scrollContainer}
                 contentContainerStyle={styles.scrollContent}
                 showsVerticalScrollIndicator={false}
@@ -353,9 +377,7 @@ const MaintenanceRatingScreen = () => {
                     <Text style={styles.screenSubtitle}>
                         {temporary ? "Temporary Closure" : "Permanent Closure"}
                     </Text>
-                    <Text style={styles.typeIndicator}>
-                        Type: {types === "preventive_maintenance" ? "Preventive Maintenance" : "Other Maintenance"}
-                    </Text>
+
 
                     {/* Machine Type Tabs */}
                     <View style={styles.tabContainer}>
@@ -403,30 +425,73 @@ const MaintenanceRatingScreen = () => {
                     </View>
                 </View>
 
-                {currentCategories.map(category => (
-                    <View key={category.id} style={styles.card}>
-                        <Text style={styles.categoryTitle}>{category.titel}</Text>
+                {currentCategories.length === 0 ? (
+                    <View style={styles.card}>
+                        <Text style={styles.noDataText}>
+                            No rating categories found for {selectedMachineType} {types === "preventive_maintenance" ? "Preventive" : ""} maintenance.
+                        </Text>
+                        <Text style={styles.noDataSubtext}>
+                            Please check if this machine type has available rating criteria.
+                        </Text>
+                    </View>
+                ) : (
+                    currentCategories.map(category => (
+                        <View key={category.id} style={styles.card}>
+                            <Text style={styles.categoryTitle}>{category.titel}</Text>
+                            {/* <Text style={styles.categoryWeight}>
+                                Weight: {category.percentage}%
+                            </Text> */}
 
-                        {category.sub_value && category.sub_value.length > 0 ? (
-                            // Preventive maintenance with sub categories
-                            category.sub_value.map(sub => (
-                                <View key={sub.id} style={styles.subCategory}>
-                                    <Text style={styles.subCategoryTitle}>{sub.titel || `Sub-item ${sub.id}`}</Text>
+                            {category.sub_value && category.sub_value.length > 0 ? (
+                                // Preventive maintenance with sub categories
+                                category.sub_value.map(sub => (
+                                    <View key={sub.id} style={styles.subCategory}>
+                                        <Text style={styles.subCategoryTitle}>{sub.titel || `Sub-item ${sub.id}`}</Text>
+                                        {/* <Text style={styles.subCategoryWeight}>
+                                            Weight: {sub.percentage}%
+                                        </Text> */}
 
+                                        <View style={styles.ratingOptions}>
+                                            {[0, 2.5, 5].map(rating => (
+                                                <TouchableOpacity
+                                                    key={rating}
+                                                    style={[
+                                                        styles.ratingOption,
+                                                        getSubRating(category.id, sub.id) === rating &&
+                                                        getRatingStyle(rating)
+                                                    ]}
+                                                    onPress={() => setSubCategoryRating(category.id, sub.id, rating)}
+                                                >
+                                                    <Text style={[
+                                                        styles.ratingOptionText,
+                                                        getSubRating(category.id, sub.id) === rating &&
+                                                        styles.ratingOptionTextSelected
+                                                    ]}>
+                                                        {getRatingLabel(rating)}
+                                                    </Text>
+                                                </TouchableOpacity>
+                                            ))}
+                                        </View>
+                                    </View>
+                                ))
+                            ) : (
+                                // Non-preventive maintenance - direct rating
+                                <>
+                                    <Text style={styles.ratingPrompt}>Select an overall rating for this section:</Text>
                                     <View style={styles.ratingOptions}>
                                         {[0, 2.5, 5].map(rating => (
                                             <TouchableOpacity
                                                 key={rating}
                                                 style={[
                                                     styles.ratingOption,
-                                                    getSubRating(category.id, sub.id) === rating &&
+                                                    getCategoryRating(category.id) === rating &&
                                                     getRatingStyle(rating)
                                                 ]}
-                                                onPress={() => setSubCategoryRating(category.id, sub.id, rating)}
+                                                onPress={() => setCategoryRating(category.id, rating)}
                                             >
                                                 <Text style={[
                                                     styles.ratingOptionText,
-                                                    getSubRating(category.id, sub.id) === rating &&
+                                                    getCategoryRating(category.id) === rating &&
                                                     styles.ratingOptionTextSelected
                                                 ]}>
                                                     {getRatingLabel(rating)}
@@ -434,37 +499,11 @@ const MaintenanceRatingScreen = () => {
                                             </TouchableOpacity>
                                         ))}
                                     </View>
-                                </View>
-                            ))
-                        ) : (
-                            // Non-preventive maintenance - direct rating
-                            <>
-                                <Text style={styles.ratingPrompt}>Select an overall rating for this section:</Text>
-                                <View style={styles.ratingOptions}>
-                                    {[0, 2.5, 5].map(rating => (
-                                        <TouchableOpacity
-                                            key={rating}
-                                            style={[
-                                                styles.ratingOption,
-                                                getCategoryRating(category.id) === rating &&
-                                                getRatingStyle(rating)
-                                            ]}
-                                            onPress={() => setCategoryRating(category.id, rating)}
-                                        >
-                                            <Text style={[
-                                                styles.ratingOptionText,
-                                                getCategoryRating(category.id) === rating &&
-                                                styles.ratingOptionTextSelected
-                                            ]}>
-                                                {getRatingLabel(rating)}
-                                            </Text>
-                                        </TouchableOpacity>
-                                    ))}
-                                </View>
-                            </>
-                        )}
-                    </View>
-                ))}
+                                </>
+                            )}
+                        </View>
+                    ))
+                )}
 
                 {/* Pagination Controls */}
                 {totalPages > 1 && (
@@ -621,6 +660,19 @@ const styles = StyleSheet.create({
         fontWeight: "600",
         marginBottom: 15,
         textAlign: "center",
+    },
+    debugInfo: {
+        backgroundColor: '#f8f9fa',
+        padding: 10,
+        marginBottom: 15,
+        borderRadius: 6,
+        borderLeftWidth: 4,
+        borderLeftColor: '#0FA37F',
+    },
+    debugText: {
+        fontSize: 12,
+        color: '#666',
+        fontFamily: 'monospace',
     },
     // Tab Styles
     tabContainer: {
@@ -808,6 +860,17 @@ const styles = StyleSheet.create({
     },
     bottomSpacer: {
         height: 100,
+    },
+    noDataText: {
+        fontSize: 16,
+        textAlign: "center",
+        color: "#666",
+        marginBottom: 8,
+    },
+    noDataSubtext: {
+        fontSize: 14,
+        textAlign: "center",
+        color: "#999",
     },
 });
 

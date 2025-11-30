@@ -1,5 +1,5 @@
 // HeadMaintenance.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
     Text,
@@ -14,7 +14,7 @@ import {
     StatusBar,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialCommunityIcons";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { useDispatch, useSelector } from "react-redux";
 import {
     fetchAllMaintenance,
@@ -40,6 +40,12 @@ export const HeadMaintenance = () => {
     useEffect(() => {
         loadMaintenanceData();
     }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            loadMaintenanceData();
+        }, [])
+    );
 
     const loadMaintenanceData = () => {
         dispatch(fetchAllMaintenance() as any);
@@ -122,7 +128,7 @@ export const HeadMaintenance = () => {
             case "open": return "Open";
             case "in_progress": return "In Progress";
             case "closed": return "Closed";
-            case "temporary_closed": return "Closed";
+            case "temporary_closed": return "Temporary Closed";
             default: return status;
         }
     };
@@ -130,7 +136,10 @@ export const HeadMaintenance = () => {
     // Simpler version without helper function
     const filteredTickets = (maintenanceList || [])
         .filter((ticket) => {
-            const matchesTab = ticket.status === selectedTab;
+            const matchesTab = selectedTab === "closed"
+                ? (ticket.status === "closed" || ticket.status === "temporary_closed")
+                : ticket.status === selectedTab;
+
             const matchesSearch = searchText === "" ||
                 ticket.ticket_no.toLowerCase().includes(searchText.toLowerCase()) ||
                 (ticket.title && ticket.title.toLowerCase().includes(searchText.toLowerCase())) ||
@@ -180,6 +189,11 @@ export const HeadMaintenance = () => {
 
     // Also update the getTicketCount function:
     const getTicketCount = (status: string) => {
+        if (status === "closed") {
+            return (maintenanceList || []).filter(ticket =>
+                ticket.status === "closed" || ticket.status === "temporary_closed"
+            ).length;
+        }
         return (maintenanceList || []).filter(ticket => ticket.status === status).length;
     };
 
@@ -197,6 +211,7 @@ export const HeadMaintenance = () => {
         const showEngineer = selectedTab === "in_progress" || selectedTab === "closed";
         const statusLabel = getStatusLabel(item.status);
         const showCloserRequested = item.is_ready_for_closer;
+        const isTemporaryClosed = item.status === "temporary_closed";
 
         return (
             <TouchableOpacity
@@ -261,21 +276,40 @@ export const HeadMaintenance = () => {
                     </View>
                 </View>
 
-                <View style={styles.statusContainer}>
-                    <View style={styles.statusLabelContainer}>
-                        <Text style={styles.label}>Assigned Engineer</Text>
-                        <View style={styles.engineerRow}>
-                            <Text style={styles.status} numberOfLines={1}>
-                                {item.serviceSalePerson?.[0] || "Not Assigned"}
-                            </Text>
-                            {showCloserRequested && (
-                                <View style={styles.closerRequestedBadge}>
-                                    <Text style={styles.closerRequestedText}>Closer Requested</Text>
-                                </View>
-                            )}
+                {/* Assigned Engineer - Show in In Progress and Closed tabs */}
+                {showEngineer && (
+                    <View style={styles.statusContainer}>
+                        <View style={styles.statusLabelContainer}>
+                            <Text style={styles.label}>Assigned Engineer</Text>
+                            <View style={styles.engineerRow}>
+                                <Text style={styles.status} numberOfLines={1}>
+                                    {item.serviceSalePerson?.[0] || "Not Assigned"}
+                                </Text>
+                                {showCloserRequested && (
+                                    <View style={styles.closerRequestedBadge}>
+                                        <Text style={styles.closerRequestedText}>Closer Requested</Text>
+                                    </View>
+                                )}
+                            </View>
                         </View>
                     </View>
-                </View>
+                )}
+
+                {/* Status - Only show in closed tab */}
+                {selectedTab === "closed" && (
+                    <View style={styles.statusRow}>
+                        <Text style={styles.label}>Status</Text>
+                        <Text style={[
+                            styles.statusBadge,
+                            isTemporaryClosed && styles.temporaryClosedBadge,
+                            item.status === "closed" && styles.closedBadge,
+                            item.status === "open" && styles.openBadge,
+                            item.status === "in_progress" && styles.inProgressBadge
+                        ]}>
+                            {statusLabel}
+                        </Text>
+                    </View>
+                )}
             </TouchableOpacity>
         );
     };
@@ -725,5 +759,39 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: "600",
         fontFamily: 'Inter-SemiBold',
+    },
+    // Status row styles
+    statusRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        alignItems: "center",
+        marginTop: 8,
+        paddingTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: '#eee',
+    },
+    statusBadge: {
+        fontSize: 12,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 10,
+        textTransform: "capitalize",
+        color: "#fff",
+        fontWeight: "600" as const,
+        fontFamily: 'Inter-SemiBold',
+        textAlign: 'center',
+        minWidth: 100,
+    },
+    temporaryClosedBadge: {
+        backgroundColor: "#FFA500",
+    },
+    closedBadge: {
+        backgroundColor: "#ff0202",
+    },
+    openBadge: {
+        backgroundColor: "#0FA37F",
+    },
+    inProgressBadge: {
+        backgroundColor: "#1271EE",
     },
 });

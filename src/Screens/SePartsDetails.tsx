@@ -321,6 +321,7 @@ const SePartsDetails = () => {
             );
         });
 
+
     const getStatusColor = (part: WalletPart) => {
         if (part.install_quantity !== null && part.install_quantity > 0) return "#2196F3"; // Blue for installed
         if (part.is_approved) return "#0FA37F"; // Green for approved
@@ -561,7 +562,9 @@ const SePartsDetails = () => {
                                             </View>
                                             <View style={styles.detailRow}>
                                                 <Text style={styles.detailLabel}>Approved Quantity:</Text>
-                                                <Text style={styles.detailValue}>{item.approve_quantity}</Text>
+                                                <Text style={styles.detailValue}>
+                                                    {item.is_approved ? item.approve_quantity : "0"}
+                                                </Text>
                                             </View>
                                             <View style={styles.detailRow}>
                                                 <Text style={styles.detailLabel}>Already Released:</Text>

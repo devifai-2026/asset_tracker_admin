@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   StatusBar,
   KeyboardAvoidingView,
   Platform,
+  RefreshControl,
 } from "react-native";
 import { useRoute, useNavigation } from "@react-navigation/native";
 import { useDispatch, useSelector } from "react-redux";
@@ -41,7 +42,8 @@ const OpenAssetsDetails = () => {
   const [showAssetDetails, setShowAssetDetails] = useState(true);
   const [showComments, setShowComments] = useState(false);
   const [rejectPressed, setRejectPressed] = useState(false);
-  const [showCommentBox, setShowCommentBox] = useState(false); // New state to control comment box visibility
+  const [showCommentBox, setShowCommentBox] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (ticket?.id) {
@@ -51,6 +53,21 @@ const OpenAssetsDetails = () => {
     return () => {
       dispatch(clearCurrentDetail());
     };
+  }, [ticket?.id, dispatch]);
+
+  // Pull-to-refresh handler
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (ticket?.id) {
+        await dispatch(fetchMaintenanceDetail(ticket.id) as any);
+      }
+    } catch (error) {
+      console.error("Refresh error:", error);
+      Alert.alert("Error", "Failed to refresh data");
+    } finally {
+      setRefreshing(false);
+    }
   }, [ticket?.id, dispatch]);
 
   // Universal date formatter that handles multiple input formats
@@ -269,8 +286,10 @@ const OpenAssetsDetails = () => {
     lease_customer,
     lease_end_date,
     lease_sale_person,
-    complaint_type
+    complaint_type,
   } = maintenanceDetail;
+
+
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -291,6 +310,15 @@ const OpenAssetsDetails = () => {
           contentContainerStyle={styles.scrollViewContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#0FA37F"]} // Android - 
+              tintColor="#0FA37F" // iOS 
+              title="Refreshing..." // iOS
+              titleColor="#666" // iOS
+            />}
         >
 
           {/* Asset Details */}
@@ -325,8 +353,8 @@ const OpenAssetsDetails = () => {
                   </View>
                   <View style={styles.detailItem}>
                     <Text style={styles.label}>Lease</Text>
-                    <View style={styles.badgeActive}>
-                      <Text style={styles.badgeText}>Active</Text>
+                    <View>
+                      <Text>{asset.lease_status}</Text>
                     </View>
                   </View>
                 </View>
@@ -364,7 +392,12 @@ const OpenAssetsDetails = () => {
                 <View style={styles.detailsGrid}>
                   <View style={styles.detailItem}>
                     <Text style={styles.label}>Operator</Text>
-                    <Text style={styles.value}>N/A</Text>
+                    <Text style={styles.value}>
+                      {Array.isArray(maintenanceDetail?.lease_operator) &&
+                        maintenanceDetail.lease_operator.length > 0
+                        ? maintenanceDetail.lease_operator[0]
+                        : "N/A"}
+                    </Text>
                   </View>
                   <View style={styles.detailItem}>
                     <Text style={styles.label}>Sales Person</Text>

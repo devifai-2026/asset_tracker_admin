@@ -1,5 +1,4 @@
-// ClosedAssetDetails.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
     Text,
@@ -13,8 +12,10 @@ import {
     Modal,
     Dimensions,
     Alert,
+    Platform,
+    RefreshControl,
 } from "react-native";
-import { useRoute, useNavigation } from "@react-navigation/native";
+import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useDispatch, useSelector } from "react-redux";
 import {
     fetchMaintenanceDetail,
@@ -25,6 +26,8 @@ import {
 } from "../Redux/Slices/maintenanceSlice";
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { Header } from "./Header";
+import ClosureRequestModal from "./ClosureRequestModal";
+import ExpandableText from "../Components/ExpandableText";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -40,11 +43,11 @@ const ClosedAssetDetails = () => {
 
     const [showAsset, setShowAsset] = useState(false);
     const [showComments, setShowComments] = useState(false);
-
-    // Full screen image modal states
+    const [showClosureModal, setShowClosureModal] = useState(false);
     const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
     const [showImageModal, setShowImageModal] = useState(false);
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const [refreshing, setRefreshing] = useState(false);
 
     useEffect(() => {
         if (ticket?.id) {
@@ -56,48 +59,101 @@ const ClosedAssetDetails = () => {
         };
     }, [ticket?.id, dispatch]);
 
+    useFocusEffect(
+        useCallback(() => {
+            if (ticket?.id) {
+                dispatch(fetchMaintenanceDetail(ticket.id) as any);
+            }
+
+            return () => {
+                // Optional: cleanup if needed when screen loses focus
+            };
+        }, [ticket?.id, dispatch])
+    );
+
+    // Add focus listener to refresh when screen comes into focus
+    // useEffect(() => {
+    //     const unsubscribe = navigation.addListener('focus', () => {
+    //         if (ticket?.id) {
+    //             dispatch(fetchMaintenanceDetail(ticket.id) as any);
+    //         }
+    //     });
+
+    //     return unsubscribe;
+    // }, [navigation, ticket?.id]);
+
+    // Check if maintenance is temporarily closed and ready for closer
+    const isTemporaryClosed = maintenanceDetail?.status === "temporary_closed";
+    const isReadyForCloser = maintenanceDetail?.is_ready_for_closer;
+
+    const handleRequestClosure = () => {
+        setShowClosureModal(true);
+    };
+
+    const onRefresh = React.useCallback(async () => {
+        setRefreshing(true);
+        try {
+            if (ticket?.id) {
+                await dispatch(fetchMaintenanceDetail(ticket.id) as any);
+            }
+        } catch (error) {
+            console.error('Refresh error:', error);
+        } finally {
+            setRefreshing(false);
+        }
+    }, [ticket?.id, dispatch]);
+
+    const handleClosureSubmit = (temporary: boolean) => {
+        setShowClosureModal(false);
+        if (maintenanceDetail?.id) {
+            navigation.navigate("MaintenanceRating", {
+                maintenanceId: maintenanceDetail.id,
+                temporary: isTemporaryClosed ? false : temporary,
+                types: maintenanceDetail.types,
+                onClosureComplete: () => {
+                    // Refresh data after closure is completed
+                    if (ticket?.id) {
+                        dispatch(fetchMaintenanceDetail(ticket.id) as any);
+                    }
+                }
+            });
+        } else {
+            Alert.alert("Error", "Maintenance ID not found");
+        }
+    };
+
     // Universal date formatter that handles multiple input formats
     const formatDate = (dateString: string) => {
         if (!dateString) return "N/A";
 
         try {
-            // Remove any extra spaces and trim
             dateString = dateString.toString().trim();
-
-            // Handle different separator types and formats
             let date;
 
-            // Try parsing as ISO format (YYYY-MM-DD)
             if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(dateString)) {
                 const [year, month, day] = dateString.split('-');
                 date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
             }
-            // Try parsing as DD-MM-YYYY format
             else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(dateString)) {
                 const [day, month, year] = dateString.split('-');
                 date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
             }
-            // Try parsing as DD/MM/YYYY format
             else if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(dateString)) {
                 const [day, month, year] = dateString.split('/');
                 date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
             }
-            // Try parsing as YYYY/MM/DD format
             else if (/^\d{4}\/\d{1,2}\/\d{1,2}$/.test(dateString)) {
                 const [year, month, day] = dateString.split('/');
                 date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
             }
-            // Try parsing as standard Date string
             else {
                 date = new Date(dateString);
             }
 
-            // Check if date is valid
             if (isNaN(date.getTime())) {
                 return "N/A";
             }
 
-            // Format to DD/MM/YYYY
             const day = date.getDate().toString().padStart(2, '0');
             const month = (date.getMonth() + 1).toString().padStart(2, '0');
             const year = date.getFullYear();
@@ -115,11 +171,9 @@ const ClosedAssetDetails = () => {
         if (!dateTimeString) return "N/A";
 
         try {
-            // Parse the GMT date string
             const date = new Date(dateTimeString);
 
             if (isNaN(date.getTime())) {
-                // Fallback: try parsing as is
                 const fallbackDate = new Date(dateTimeString.replace('GMT', ''));
                 if (isNaN(fallbackDate.getTime())) return "N/A";
 
@@ -181,7 +235,7 @@ const ClosedAssetDetails = () => {
         }
     };
 
-    if (loading) {
+    if (loading && !refreshing) {
         return (
             <SafeAreaView style={styles.safeArea}>
                 <View style={styles.centerContainer}>
@@ -233,7 +287,10 @@ const ClosedAssetDetails = () => {
         parts,
         comments = [],
         description,
-        photos = []
+        photos = [],
+        lease_customer,
+        lease_end_date,
+        lease_sale_person
     } = maintenanceDetail;
 
     return (
@@ -245,7 +302,47 @@ const ClosedAssetDetails = () => {
                 <Header />
             </View>
 
-            <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent}>
+            <ScrollView
+                style={styles.scrollView}
+                contentContainerStyle={styles.scrollViewContent}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={["#0FA37F"]}
+                        tintColor="#0FA37F"
+                        title="Refreshing..."
+                        titleColor="#666"
+                    />
+                }
+            >
+                {/* Closer Requested Badge */}
+                {isReadyForCloser && (
+                    <View style={styles.closerRequestedContainer}>
+                        <View style={styles.closerRequestedBadge}>
+                            <Icon name="check-circle" size={16} color="#D32F2F" />
+                            <Text style={styles.closerRequestedText}>Closer Requested</Text>
+                        </View>
+                    </View>
+                )}
+
+                {/* Request Closure Button for Temporary Closed Status */}
+                {!isReadyForCloser && isTemporaryClosed && (
+                    <TouchableOpacity
+                        style={styles.requestClosureButton}
+                        onPress={handleRequestClosure}
+                    >
+                        <Text style={styles.requestClosureButtonText}>Request Permanent Closure</Text>
+                    </TouchableOpacity>
+                )}
+
+                <ClosureRequestModal
+                    visible={showClosureModal}
+                    onClose={() => setShowClosureModal(false)}
+                    onSubmit={handleClosureSubmit}
+                    isTemporaryClosed={isTemporaryClosed}
+                />
+
                 {/* Asset Details (collapsible) */}
                 <View style={styles.card}>
                     <TouchableOpacity
@@ -270,6 +367,13 @@ const ClosedAssetDetails = () => {
                                 <Row label="Capacity" value={asset.capacity ? `${asset.capacity}kg` : "N/A"} />
                                 <Row label="Height" value={asset.hieght_machine ? `${asset.hieght_machine}ft` : "N/A"} />
                                 <Row label="Site Location" value={asset.site_location || "N/A"} />
+                                <ExpandableText
+                                    label="Customer"
+                                    value={lease_customer || "N/A"}
+                                    maxLength={30}
+                                />
+                                <Row label="Rental End Date" value={formatDate(lease_end_date) || "N/A"} />
+                                <Row label="Sale Person" value={lease_sale_person || "N/A"} />
                             </>
                         ) : (
                             <Text style={{ color: "#999", fontSize: 13 }}>No asset details available</Text>
@@ -299,8 +403,11 @@ const ClosedAssetDetails = () => {
                     <Row
                         label="Status"
                         value={
-                            <Text style={[styles.statusBadge, styles.badgeClosed]}>
-                                Closed
+                            <Text style={[
+                                styles.statusBadge,
+                                isTemporaryClosed ? styles.badgeTemporaryClosed : styles.badgeClosed
+                            ]}>
+                                {isTemporaryClosed ? "Temporarily Closed" : "Closed"}
                             </Text>
                         }
                     />
@@ -371,7 +478,7 @@ const ClosedAssetDetails = () => {
                         if (maintenanceDetail?.id) {
                             navigation.navigate("SePartsDetailsTwo", {
                                 maintenanceId: maintenanceDetail.id,
-                                parts: maintenanceDetail.parts || [] // Pass the parts data
+                                parts: maintenanceDetail.parts || []
                             });
                         } else {
                             Alert.alert("Error", "Maintenance ID not available");
@@ -382,10 +489,7 @@ const ClosedAssetDetails = () => {
                     accessibilityRole="button"
                 >
                     <View style={styles.partsHeader}>
-                        <Text style={styles.cardTitle}>Parts</Text>
-                        <Text style={styles.partsCount}>
-                            {parts?.length || 0} part{parts?.length !== 1 ? 's' : ''}
-                        </Text>
+                        <Text style={styles.cardTitle}>Installed and Removed Parts Details</Text>
                     </View>
                     <Icon name="chevron-right" size={20} color="#666" />
                 </TouchableOpacity>
@@ -411,7 +515,6 @@ const ClosedAssetDetails = () => {
                             <View style={styles.commentsContainer}>
                                 {comments.map((commentItem: any, index: number) => (
                                     <View key={commentItem.id || index} style={styles.commentItem}>
-                                        {/* Comment Header with Avatar */}
                                         <View style={styles.commentHeader}>
                                             <View style={styles.commentUserInfo}>
                                                 <View style={styles.avatar}>
@@ -437,12 +540,10 @@ const ClosedAssetDetails = () => {
                                             </View>
                                         </View>
 
-                                        {/* Comment Text */}
                                         <Text style={styles.commentText}>
                                             {commentItem.comment}
                                         </Text>
 
-                                        {/* Visit Date if available */}
                                         {commentItem.visit_date && (
                                             <View style={styles.visitDateContainer}>
                                                 <Icon name="calendar-today" size={16} color="#666" />
@@ -468,7 +569,6 @@ const ClosedAssetDetails = () => {
                 statusBarTranslucent={true}
             >
                 <View style={styles.fullScreenModal}>
-                    {/* Close Button */}
                     <TouchableOpacity
                         style={styles.modalCloseButton}
                         onPress={handleCloseImageModal}
@@ -476,7 +576,6 @@ const ClosedAssetDetails = () => {
                         <Icon name="close" size={30} color="#fff" />
                     </TouchableOpacity>
 
-                    {/* Navigation Arrows for multiple images */}
                     {photos.length > 1 && (
                         <>
                             <TouchableOpacity
@@ -495,7 +594,6 @@ const ClosedAssetDetails = () => {
                         </>
                     )}
 
-                    {/* Image */}
                     {selectedImageUri && (
                         <Image
                             source={{ uri: selectedImageUri }}
@@ -504,7 +602,6 @@ const ClosedAssetDetails = () => {
                         />
                     )}
 
-                    {/* Image Counter */}
                     {photos.length > 1 && (
                         <View style={styles.imageCounter}>
                             <Text style={styles.imageCounterText}>
@@ -569,6 +666,44 @@ const styles = StyleSheet.create({
     },
     headerRight: {
         width: 30,
+    },
+    // Closer Requested Styles
+    closerRequestedContainer: {
+        paddingHorizontal: 15,
+        paddingTop: 10,
+    },
+    closerRequestedBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: "#FFEBEE",
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: "#D32F2F",
+        alignSelf: 'flex-start',
+    },
+    closerRequestedText: {
+        color: "#D32F2F",
+        fontSize: 14,
+        fontWeight: "600",
+        fontFamily: 'Inter-SemiBold',
+        marginLeft: 6,
+    },
+    requestClosureButton: {
+        padding: 12,
+        margin: 15,
+        borderRadius: 8,
+        alignItems: "center",
+        alignSelf: "flex-end",
+        backgroundColor: "#f34141",
+        borderWidth: 1,
+        borderColor: "#ee2828",
+    },
+    requestClosureButtonText: {
+        color: "#ffffff",
+        fontWeight: "bold",
+        fontSize: 14,
     },
     accordionHeader: {
         flexDirection: "row",
@@ -657,7 +792,9 @@ const styles = StyleSheet.create({
     badgeClosed: {
         backgroundColor: "#6c757d",
     },
-
+    badgeTemporaryClosed: {
+        backgroundColor: "#ffc107",
+    },
     // Attachments Section Styles
     attachmentsContainer: {
         marginTop: 10,
@@ -704,7 +841,6 @@ const styles = StyleSheet.create({
         marginVertical: 10,
         fontFamily: 'Inter-Regular',
     },
-
     // Comment Section Styles
     commentsContainer: {
         marginTop: 10,
@@ -798,7 +934,6 @@ const styles = StyleSheet.create({
         marginLeft: 6,
         fontFamily: 'Inter-Regular',
     },
-
     errorText: {
         color: "#ff0202",
         fontSize: 16,
@@ -829,7 +964,6 @@ const styles = StyleSheet.create({
         lineHeight: 20,
         fontFamily: 'Inter-Regular',
     },
-
     partsHeader: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -844,7 +978,6 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         fontFamily: 'Inter-Regular',
     },
-
     // Full Screen Image Modal Styles
     fullScreenModal: {
         flex: 1,

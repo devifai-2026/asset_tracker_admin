@@ -59,12 +59,20 @@ const PartsDetails = ({ navigation, route }: any) => {
             // Prepare all parts data - FILTERED by maintenanceId
             const allParts: any[] = [];
 
-            // In the loadPartsData function, update the part creation:
             serviceSalePersons.forEach((person: any) => {
                 if (person.wallet && person.wallet.length > 0) {
                     person.wallet.forEach((item: any, index: number) => {
                         // Only include parts that match the maintenanceId
                         if (item.maintenance_id === maintenanceId) {
+                            // IMPORTANT: Check if it's a local part
+                            const isLocalPart = item.is_local_part || false;
+
+                            // For local parts, use approve_quantity as the base quantity
+                            // For non-local parts, use requested_quantity
+                            const baseQuantity = isLocalPart ?
+                                (item.approve_quantity || 0) :
+                                (item.requested_quantity || 0);
+
                             allParts.push({
                                 id: item.id?.toString() || `${person.id}-${index}`,
                                 partNo: item.part_no || "N/A",
@@ -73,11 +81,12 @@ const PartsDetails = ({ navigation, route }: any) => {
                                 date: item.requested_date ?
                                     new Date(item.requested_date).toLocaleDateString('en-GB').split('/').join('-') : "N/A",
                                 status: item.is_approved ? "approved" : "requested",
-                                requestedQuantity: item.requested_quantity || 1, // Add requested quantity
-                                approvedQuantity: item.approve_quantity || null, // Add approved quantity
-                                quantity: item.is_approved ? item.approve_quantity : item.requested_quantity, // Keep for compatibility
+                                requestedQuantity: baseQuantity, // Use the calculated base quantity
+                                approvedQuantity: item.approve_quantity || null,
+                                quantity: baseQuantity, // For compatibility
                                 originalData: item,
-                                isSelected: false
+                                isSelected: false,
+                                isLocalPart: isLocalPart // Add this flag for easy access
                             });
                         }
                     });
@@ -182,7 +191,6 @@ const PartsDetails = ({ navigation, route }: any) => {
 
     const handleApproveParts = async () => {
         try {
-            // VALIDATION: Check for invalid quantities before submitting
             const invalidParts: string[] = [];
 
             selectedParts.forEach(part => {
@@ -214,21 +222,25 @@ const PartsDetails = ({ navigation, route }: any) => {
                 return;
             }
 
-            // CORRECTED PAYLOAD STRUCTURE
+            // CORRECTED PAYLOAD STRUCTURE - WEB COMPATIBLE
             const approvalPayload = selectedParts.map(part => {
                 const approvedQuantity = parseInt(approveQuantities[part.id]);
 
+                // WEB-COMPATIBLE PAYLOAD STRUCTURE
                 return {
-                    id: part.originalData.id, // Use the wallet item ID
+                    id: part.originalData.id,
                     part_inventory_id: part.originalData.part_inventory_id,
                     maintenance_id: part.originalData.maintenance_id,
-                    approved_quantity: approvedQuantity,
+                    approve_quantity: approvedQuantity.toString(), // Web uses string format
                     is_approved: true,
-                    // Include other required fields from your API response
                     part_no: part.partNo,
                     requested_quantity: part.requestedQuantity || part.quantity,
                     in_stock_quantity: part.originalData?.in_stock_quantity || "0",
-                    is_local_part: part.originalData?.is_local_part || false
+                    is_local_part: part.originalData?.is_local_part || false,
+                    // Include additional fields that web expects
+                    comsumed_quantity: 0,
+                    requested_date: part.originalData?.requested_date || new Date().toISOString(),
+                    quantity: approvedQuantity // Additional field for web compatibility
                 };
             });
 
@@ -249,7 +261,7 @@ const PartsDetails = ({ navigation, route }: any) => {
                             ...part,
                             status: "approved",
                             approvedQuantity: approvedQty,
-                            quantity: approvedQty, // For compatibility
+                            quantity: approvedQty,
                             isSelected: false
                         };
                     }
@@ -291,14 +303,18 @@ const PartsDetails = ({ navigation, route }: any) => {
         }
     };
 
-    // FIXED: Increment - never exceed requested quantity
     const incrementQuantity = (partId: string) => {
         const currentValue = approveQuantities[partId];
         const currentQty = currentValue ? parseInt(currentValue) : 0;
         const part = selectedParts.find(p => p.id === partId);
-        const requestedQty = part?.requestedQuantity || part?.quantity || 1;
 
-        if (currentQty < requestedQty) {
+        // For local parts, use approve_quantity as maximum limit
+        // For non-local parts, use requested_quantity as maximum limit
+        const maxAllowedQty = part?.isLocalPart ?
+            part.originalData.approve_quantity :
+            (part?.requestedQuantity || part?.quantity || 1);
+
+        if (currentQty < maxAllowedQty) {
             setApproveQuantities({
                 ...approveQuantities,
                 [partId]: (currentQty + 1).toString()
@@ -306,13 +322,12 @@ const PartsDetails = ({ navigation, route }: any) => {
         } else {
             Alert.alert(
                 "Maximum Quantity",
-                `Cannot exceed requested quantity of ${requestedQty}`,
+                `Cannot exceed ${part?.isLocalPart ? 'approved' : 'requested'} quantity of ${maxAllowedQty}`,
                 [{ text: "OK" }]
             );
         }
     };
 
-    // FIXED: Decrement - never go below 1
     const decrementQuantity = (partId: string) => {
         const currentValue = approveQuantities[partId];
         const currentQty = currentValue ? parseInt(currentValue) : 1;
@@ -337,9 +352,14 @@ const PartsDetails = ({ navigation, route }: any) => {
         if (!inputValue || inputValue.trim() === '') return false;
 
         const quantity = parseInt(inputValue);
-        const requestedQty = part.quantity;
 
-        return quantity > 0 && quantity <= requestedQty;
+        // For local parts, use approve_quantity as maximum limit
+        // For non-local parts, use requested_quantity as maximum limit
+        const maxAllowedQty = part.isLocalPart ?
+            part.originalData.approve_quantity :
+            part.requestedQuantity;
+
+        return quantity > 0 && quantity <= maxAllowedQty;
     });
 
     // Helper to get display value for input (shows empty when typing)
@@ -386,7 +406,14 @@ const PartsDetails = ({ navigation, route }: any) => {
                     )}
                 </View>
                 <View style={styles.partInfo}>
-                    <Text style={styles.partLabel}>Part No.</Text>
+                    <View style={styles.partHeader}>
+                        <Text style={styles.partLabel}>Part No.</Text>
+                        {item.isLocalPart && (
+                            <View style={styles.localPartBadge}>
+                                <Text style={styles.localPartText}>Local Part</Text>
+                            </View>
+                        )}
+                    </View>
                     <Text style={styles.partNumber}>{item.partNo}</Text>
                     <Text style={styles.requestedBy}>Requested By: {item.requestedBy}</Text>
 
@@ -394,14 +421,16 @@ const PartsDetails = ({ navigation, route }: any) => {
                     {item.status === "approved" ? (
                         <View style={styles.quantityContainer}>
                             <Text style={styles.quantityText}>
-                                Requested: <Text style={styles.quantityValue}>{item.requestedQuantity}</Text>
+                                {item.isLocalPart ? 'Approved' : 'Requested'}: <Text style={styles.quantityValue}>{item.requestedQuantity}</Text>
                             </Text>
                             <Text style={styles.quantityText}>
-                                Approved: <Text style={styles.approvedQuantityValue}>{item.approvedQuantity}</Text>
+                                Final Approved: <Text style={styles.approvedQuantityValue}>{item.approvedQuantity}</Text>
                             </Text>
                         </View>
                     ) : (
-                        <Text style={styles.quantityText}>Qty: {item.quantity}</Text>
+                        <Text style={styles.quantityText}>
+                            {item.isLocalPart ? 'Approved Qty' : 'Requested Qty'}: {item.quantity}
+                        </Text>
                     )}
                 </View>
                 <View style={styles.statusContainer}>
@@ -591,13 +620,22 @@ const PartsDetails = ({ navigation, route }: any) => {
                             {selectedParts.map((part) => (
                                 <View key={part.id} style={styles.approveItem}>
                                     <View style={styles.approveItemHeader}>
-                                        <Text style={styles.approvePartNumber}>{part.partNo}</Text>
+                                        <View style={styles.partHeader}>
+                                            <Text style={styles.approvePartNumber}>{part.partNo}</Text>
+                                            {part.isLocalPart && (
+                                                <View style={styles.localPartBadge}>
+                                                    <Text style={styles.localPartText}>Local Part</Text>
+                                                </View>
+                                            )}
+                                        </View>
                                         <Text style={styles.approveRequestedBy}>By: {part.requestedBy}</Text>
                                     </View>
 
                                     <View style={styles.approveItemDetails}>
                                         <View style={styles.quantitySection}>
-                                            <Text style={styles.quantityLabel}>Requested Quantity: {part.quantity}</Text>
+                                            <Text style={styles.quantityLabel}>
+                                                {part.isLocalPart ? 'Approved Quantity' : 'Requested Quantity'}: {part.quantity}
+                                            </Text>
 
                                             <View style={styles.quantityControlContainer}>
                                                 <Text style={styles.approveQuantityLabel}>Approve Quantity:</Text>
@@ -627,6 +665,12 @@ const PartsDetails = ({ navigation, route }: any) => {
                                                         <Icon name="plus" size={16} color="#1A1D29" />
                                                     </TouchableOpacity>
                                                 </View>
+
+                                                {part.isLocalPart && (
+                                                    <Text style={styles.localPartNote}>
+                                                        Maximum allowed: {part.originalData?.approve_quantity || part.quantity}
+                                                    </Text>
+                                                )}
                                             </View>
                                         </View>
 
@@ -1044,6 +1088,47 @@ const styles = StyleSheet.create({
         fontSize: 12,
         fontWeight: "600",
         color: "#00BFA5", // Green color for approved quantity
+    },
+
+
+
+
+
+
+
+
+    partHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    localPartBadge: {
+        backgroundColor: '#E3F2FD',
+        paddingHorizontal: 8,
+        paddingVertical: 2,
+        borderRadius: 4,
+        marginLeft: 8,
+    },
+    localPartText: {
+        fontSize: 10,
+        color: '#1976D2',
+        fontWeight: '600',
+    },
+    localPartNote: {
+        fontSize: 10,
+        color: '#666',
+        fontStyle: 'italic',
+    },
+    localPartApproval: {
+        backgroundColor: '#E8F5E8',
+        padding: 8,
+        borderRadius: 4,
+        marginTop: 4,
+    },
+    localPartApprovalText: {
+        fontSize: 14,
+        color: '#2E7D32',
+        fontWeight: '600',
     },
 });
 

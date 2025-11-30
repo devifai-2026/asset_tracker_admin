@@ -1,5 +1,5 @@
 // AssetDetailsScreen.tsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
     ScrollView,
@@ -13,7 +13,8 @@ import {
     StatusBar,
     KeyboardAvoidingView,
     Platform,
-    Image
+    Image,
+    RefreshControl
 } from "react-native";
 import { launchCamera, launchImageLibrary } from "react-native-image-picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
@@ -32,11 +33,13 @@ import {
 } from "../../../Redux/Slices/maintenanceSlice";
 import { RootState } from "../../../Redux/store";
 import { maintenanceApi } from "../../../api/maintenanceApi";
+import { useFocusEffect } from "@react-navigation/native";
 
 const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any }) => {
     const { maintenanceId } = route.params || {};
     const dispatch = useDispatch();
 
+    const [refreshing, setRefreshing] = useState(false);
     const [showWalletPopup, setShowWalletPopup] = useState(false);
     const [selectedEngineer, setSelectedEngineer] = useState("");
     const [selectedPart, setSelectedPart] = useState("");
@@ -54,7 +57,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
     const [showComments, setShowComments] = useState(false);
     const [showRejectComments, setShowRejectComments] = useState(false);
     const [showAttachments, setShowAttachments] = useState(false);
-    
+
     // New state for full screen image view
     const [selectedFullScreenImage, setSelectedFullScreenImage] = useState<any>(null);
     const [showFullScreenImage, setShowFullScreenImage] = useState(false);
@@ -69,6 +72,29 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
             dispatch(fetchMaintenanceDetailNew(maintenanceId) as any);
         }
     }, [maintenanceId, dispatch]);
+
+    const onRefresh = useCallback(async () => {
+        setRefreshing(true);
+        try {
+            if (maintenanceId) {
+                await dispatch(fetchMaintenanceDetailNew(maintenanceId) as any);
+            }
+        } catch (error) {
+            console.error("Refresh error:", error);
+            Alert.alert("Error", "Failed to refresh data");
+        } finally {
+            setRefreshing(false);
+        }
+    }, [maintenanceId, dispatch]);
+
+    useFocusEffect(
+        useCallback(() => {
+            if (maintenanceId) {
+                console.log("AssetDetailsScreen focused - refreshing data");
+                dispatch(fetchMaintenanceDetailNew(maintenanceId) as any);
+            }
+        }, [maintenanceId, dispatch])
+    );
 
     // Handle maintenance closure
     const handleMaintenanceClosure = async () => {
@@ -172,22 +198,23 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
         sales: "$10,000",
         make: maintenanceDetail?.asset?.make || "NCR",
         rentalEndDate: formatDate(maintenanceDetail?.lease_end_date || "NA"),
-        lease: maintenanceDetail?.lease || "NA",
+        lease: maintenanceDetail?.asset.lease_status || "NA",
         operator: maintenanceDetail?.lease_operator?.length ? maintenanceDetail.lease_operator[0] : "NA",
         salesPerson: maintenanceDetail?.lease_sale_person || "NA"
     };
 
     // Format the maintenance details from API response - Provide default values instead of null
     const maintenance = {
-        ticketId: maintenanceDetail?.ticket_no || "TKT123456",
-        complainDate: formatDate(maintenanceDetail?.compaint_date || "2023-10-15"),
-        breakdownType: maintenanceDetail?.complaint_type || "Hardware",
-        breakdownTitle: maintenanceDetail?.complaint || "Machine Not Working",
-        breakdownDate: formatDate(maintenanceDetail?.issue_date || "2023-10-14"),
+        ticketId: maintenanceDetail?.ticket_no || "NA",
+        complainDate: formatDate(maintenanceDetail?.compaint_date || "NA"),
+        breakdownType: maintenanceDetail?.complaint_type || "NA",
+        breakdownTitle: maintenanceDetail?.complaint || "NA",
+        breakdownDate: formatDate(maintenanceDetail?.issue_date || "NA"),
         priority: maintenanceDetail?.priority || "NA",
         status: maintenanceDetail?.status || "In Progress",
-        deadline: formatDate(maintenanceDetail?.ready_date || "2023-10-20"),
-        engineer: maintenanceDetail?.serviceSalePersons?.[0]?.name || "John Doe"
+        deadline: formatDate(maintenanceDetail?.ready_date || "NA"),
+        engineer: maintenanceDetail?.serviceSalePersons?.[0]?.name || "NA",
+        types: maintenanceDetail?.types || "NA"
     };
 
     // Function to handle image tap for full screen view
@@ -365,6 +392,17 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                         contentContainerStyle={styles.scrollViewContent}
                         showsVerticalScrollIndicator={false}
                         keyboardShouldPersistTaps="handled"
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={refreshing}
+                                onRefresh={onRefresh}
+                                colors={["#00BFA5"]} // Android
+                                tintColor="#00BFA5" // iOS
+                                title="Refreshing..." // iOS
+                                titleColor="#666" // iOS
+                            />
+                        }
+
                     >
                         {maintenanceDetail?.is_ready_for_closer && (
                             <ClosureBanner onClosePress={() => setShowClosureConfirm(true)} />
@@ -524,7 +562,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                 {showRejectComments && (
                                     <View style={styles.commentsContainer}>
                                         {maintenanceDetail.reject_comments.map((rejectComment: any, index: number) => {
-                                           const statusInfo = getStatusInfo(rejectComment.is_accepted);
+                                            const statusInfo = getStatusInfo(rejectComment.is_accepted);
                                             return (
                                                 <View key={index} style={styles.rejectCommentItem}>
                                                     {/* Reject Comment Header */}
@@ -594,7 +632,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                 ))
                             ) : (
                                 <View style={styles.emptyContainer}>
-                                    <Text style={styles.emptyText}>No service persons assigned</Text>
+                                    <Text style={styles.emptyText}>No service persons assigned yet</Text>
                                 </View>
                             )}
                         </View>
@@ -644,36 +682,42 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                         </View>
 
                         {/* Engineer Section */}
-                        {<EngineerSection
-                            showWalletPopup={showWalletPopup}
-                            setShowWalletPopup={setShowWalletPopup}
-                            navigation={navigation}
-                            showEngineerOptions={showEngineerOptions}
-                            showPartOptions={showPartOptions}
-                            showPriorityOptions={showPriorityOptions}
-                            setShowDatePicker={setShowDatePicker}
-                            selectedEngineer={selectedEngineer}
-                            selectedPart={selectedPart}
-                            selectedPriority={selectedPriority}
-                            setSelectedPriority={setSelectedPriority}
-                            selectedDate={selectedDate}
-                            formatDate={(date) => {
-                                const day = date.getDate().toString().padStart(2, '0');
-                                const month = (date.getMonth() + 1).toString().padStart(2, '0');
-                                const year = date.getFullYear();
-                                return `${day}/${month}/${year}`;
-                            }}
-                            comment={comment}
-                            setComment={setComment}
-                            selectedImage={selectedImage}
-                            setSelectedImage={setSelectedImage}
-                            showImagePickerOptions={showImagePickerOptions}
-                            removeImage={removeImage}
-                            handleUpdate={handleUpdate}
-                            maintenanceId={maintenanceId}
-                            maintenanceData={maintenanceDetail}
-                            status={maintenanceDetail?.status || ""}
-                        />}
+                        {maintenanceDetail?.status === "temporary_closed" || maintenanceDetail?.status === "closed" ? (
+                            <View style={styles.emptyContainer}>
+                                <Text style={styles.emptyText}>No actions available for closed tickets</Text>
+                            </View>
+                        ) : (
+                            <EngineerSection
+                                showWalletPopup={showWalletPopup}
+                                setShowWalletPopup={setShowWalletPopup}
+                                navigation={navigation}
+                                showEngineerOptions={showEngineerOptions}
+                                showPartOptions={showPartOptions}
+                                showPriorityOptions={showPriorityOptions}
+                                setShowDatePicker={setShowDatePicker}
+                                selectedEngineer={selectedEngineer}
+                                selectedPart={selectedPart}
+                                selectedPriority={selectedPriority}
+                                setSelectedPriority={setSelectedPriority}
+                                selectedDate={selectedDate}
+                                formatDate={(date) => {
+                                    const day = date.getDate().toString().padStart(2, '0');
+                                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                                    const year = date.getFullYear();
+                                    return `${day}/${month}/${year}`;
+                                }}
+                                comment={comment}
+                                setComment={setComment}
+                                selectedImage={selectedImage}
+                                setSelectedImage={setSelectedImage}
+                                showImagePickerOptions={showImagePickerOptions}
+                                removeImage={removeImage}
+                                handleUpdate={handleUpdate}
+                                maintenanceId={maintenanceId}
+                                maintenanceData={maintenanceDetail}
+                                status={maintenanceDetail?.status || ""}
+                            />
+                        )}
                     </ScrollView>
 
                     {/* Full Screen Image Modal */}
@@ -684,13 +728,13 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                         onRequestClose={closeFullScreenImage}
                     >
                         <View style={styles.fullScreenModal}>
-                            <TouchableOpacity 
+                            <TouchableOpacity
                                 style={styles.fullScreenCloseButton}
                                 onPress={closeFullScreenImage}
                             >
                                 <Icon name="close" size={30} color="#FFFFFF" />
                             </TouchableOpacity>
-                            
+
                             {selectedFullScreenImage && (
                                 <Image
                                     source={{ uri: `https://${selectedFullScreenImage.image_uri}` }}
@@ -698,7 +742,7 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
                                     resizeMode="contain"
                                 />
                             )}
-                            
+
                             <View style={styles.fullScreenImageInfo}>
                                 <Text style={styles.fullScreenImageText}>
                                     {selectedFullScreenImage?.image_uri?.split('/').pop() || "Attachment"}
@@ -1294,6 +1338,7 @@ const styles = StyleSheet.create({
         borderWidth: 2,
         borderColor: '#edf2f7',
         borderStyle: 'dashed',
+        marginTop: 16,
     },
     emptyText: {
         fontSize: 15,

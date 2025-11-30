@@ -11,6 +11,7 @@ interface MaintenanceDetails {
     status: string;
     deadline: string;
     engineer: string;
+    types: string;
 }
 
 interface MaintenanceDetailsSectionProps {
@@ -19,7 +20,22 @@ interface MaintenanceDetailsSectionProps {
 
 const MaintenanceDetailsSection = ({ maintenance }: MaintenanceDetailsSectionProps) => {
 
-    // console.log("Maintenance Details::::::::::::::::::::::::::::", maintenance);
+
+    // Type display mapping function
+    const getDisplayType = (type: string) => {
+        const typeMap: { [key: string]: string } = {
+            "warranty": "Warranty",
+            "safety_notice": "Safety Notice",
+            "non_warranty": "Non-Warranty",
+            "preventive_maintenance": "Preventive Maintenance",
+            "installation": "Installation",
+            "repair": "Repair",
+            "inspection": "Inspection"
+        };
+
+        return typeMap[type] || type; 
+    };
+
     return (
         <View style={styles.section}>
             <Text style={styles.sectionTitle}>Maintenance Details</Text>
@@ -48,6 +64,10 @@ const MaintenanceDetailsSection = ({ maintenance }: MaintenanceDetailsSectionPro
                     <View style={styles.maintenanceItem}>
                         <Text style={styles.maintenanceLabel}>Breakdown Date</Text>
                         <Text style={styles.maintenanceValue}>{maintenance.breakdownDate}</Text>
+                    </View>
+                    <View style={styles.maintenanceItem}>
+                        <Text style={styles.maintenanceLabel}>Category</Text>
+                        <Text style={styles.maintenanceValue}>{getDisplayType(maintenance.types)}</Text>
                     </View>
                     <View style={styles.maintenanceItem}>
                         <Text style={styles.maintenanceLabel}>Priority</Text>

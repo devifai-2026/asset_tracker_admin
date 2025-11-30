@@ -16,6 +16,7 @@ import {
   StatusBar,
   Modal,
   Dimensions,
+  RefreshControl,
 } from "react-native";
 import { useRoute, useNavigation, useFocusEffect } from "@react-navigation/native";
 import { useDispatch, useSelector } from "react-redux";
@@ -33,6 +34,7 @@ import ClosureRequestModal from "./ClosureRequestModal";
 import { Header } from "./Header";
 import { authClient } from "../services/api.clients";
 import { APIEndpoints } from "../services/api.endpoints";
+import ExpandableText from "../Components/ExpandableText";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -60,6 +62,7 @@ const AcceptAssetDetails = () => {
   const [selectedImageUri, setSelectedImageUri] = useState<string | null>(null);
   const [showImageModal, setShowImageModal] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
 
   const fetchData = useCallback(() => {
     if (ticket?.id) {
@@ -68,7 +71,7 @@ const AcceptAssetDetails = () => {
   }, [ticket?.id, dispatch]);
 
 
-  console.log("maindetails",maintenanceDetail)
+  console.log("maindetails", maintenanceDetail)
 
   // Use useFocusEffect to refresh data when screen comes into focus
   useFocusEffect(
@@ -81,6 +84,20 @@ const AcceptAssetDetails = () => {
       };
     }, [fetchData])
   );
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      if (ticket?.id) {
+        await dispatch(fetchMaintenanceDetail(ticket.id) as any);
+      }
+    } catch (error) {
+      console.error("Refresh error:", error);
+      Alert.alert("Error", "Failed to refresh data");
+    } finally {
+      setRefreshing(false);
+    }
+  }, [ticket?.id, dispatch]);
 
   useEffect(() => {
     fetchData();
@@ -515,7 +532,10 @@ const AcceptAssetDetails = () => {
     comments = [],
     description,
     is_ready_for_closer,
-    photos = []
+    photos = [],
+    lease_customer,
+    lease_end_date,
+    lease_sale_person
   } = maintenanceDetail;
 
 
@@ -533,7 +553,18 @@ const AcceptAssetDetails = () => {
         behavior={Platform.OS === "ios" ? "padding" : "height"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
       >
-        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent}>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={["#0FA37F"]} // Android - 
+              tintColor="#0FA37F" // iOS - 
+              title="Refreshing..." // iOS
+              titleColor="#666" // iOS
+            />
+          }
+        >
           {/* Request Closure */}
           {is_ready_for_closer ? (
             <View style={styles.closureRequestedContainer}>
@@ -576,6 +607,15 @@ const AcceptAssetDetails = () => {
                   <Row label="Capacity" value={asset.capacity ? `${asset.capacity}kg` : "N/A"} />
                   <Row label="Height" value={asset.hieght_machine ? `${asset.hieght_machine}ft` : "N/A"} />
                   <Row label="Site Location" value={asset.site_location || "N/A"} />
+                  <ExpandableText
+                    label="Customer"
+                    value={lease_customer || "N/A"}
+                    maxLength={30} 
+                  />
+                  <Row label="Rental End Date" value={formatDate(lease_end_date) || "N/A"} />
+                  <Row label="Sale Person" value={formatDate(lease_sale_person) || "N/A"} />
+                  {/* <Row label="Operator" value={maintenanceDetail?.lease_operator[0] || "N/A"} /> not getting data */}
+
                 </>
               ) : (
                 <Text style={{ color: "#999", fontSize: 13 }}>
@@ -708,10 +748,7 @@ const AcceptAssetDetails = () => {
             accessibilityRole="button"
           >
             <View style={styles.partsHeader}>
-              <Text style={styles.cardTitle}>Parts</Text>
-              <Text style={styles.partsCount}>
-                {parts?.length || 0} part{parts?.length !== 1 ? 's' : ''}
-              </Text>
+              <Text style={styles.cardTitle}>Installed and Removed Parts Details</Text>
             </View>
             <Icon name="chevron-right" size={20} color="#666" />
           </TouchableOpacity>

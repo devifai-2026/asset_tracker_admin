@@ -23,7 +23,7 @@ const SePartsDetailsTwo = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'installed' | 'removed'>('all');
 
-  console.log(":::::::::::::::::::::::::::::mid", maintenanceId)
+  // console.log(":::::::::::::::::::::::::::::mid", maintenanceId)
 
   // In a real app, you might fetch parts based on maintenanceId
   const parts = initialParts || [];
@@ -45,7 +45,32 @@ const SePartsDetailsTwo = () => {
       filtered = filtered.filter((part: any) => part.installation === false);
     }
 
-    return filtered;
+    // Group by part_no and installation status, and sum quantities
+    const groupedParts = filtered.reduce((acc: any[], part: any) => {
+      const existingPart = acc.find(
+        (p: any) =>
+          p.part_no === part.part_no &&
+          p.installation === part.installation
+      );
+
+      if (existingPart) {
+        // If part already exists, add the quantity
+        existingPart.quantity = (parseInt(existingPart.quantity) || 0) + (parseInt(part.quantity) || 0);
+        // You might want to handle price aggregation as well
+        // existingPart.price = (parseFloat(existingPart.price) || 0) + (parseFloat(part.price) || 0);
+      } else {
+        // If part doesn't exist, add it to the array
+        acc.push({
+          ...part,
+          id: `${part.part_no}-${part.installation}`, // Create unique ID for FlatList
+          quantity: parseInt(part.quantity) || 0
+        });
+      }
+
+      return acc;
+    }, []);
+
+    return groupedParts;
   }, [parts, searchQuery, filter]);
 
   const getStatusInfo = (installation: boolean) => {
@@ -82,7 +107,7 @@ const SePartsDetailsTwo = () => {
         <View style={styles.partHeader}>
           <View style={styles.partInfo}>
             <Text style={styles.partNo}>{item.part_no || 'N/A'}</Text>
-            <Text style={styles.partName}>{item.name || 'No Name'}</Text>
+            {/* <Text style={styles.partName}>{item.name || 'No Name'}</Text> */}
           </View>
           <View
             style={[
@@ -106,16 +131,6 @@ const SePartsDetailsTwo = () => {
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Quantity:</Text>
             <Text style={styles.detailValue}>{item.quantity || '0'}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Unit Price:</Text>
-            <Text style={styles.detailValue}>
-              ₹{(parseFloat(item.price) || 0).toFixed(2)}
-            </Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Total Price:</Text>
-            <Text style={styles.totalPrice}>₹{totalPrice.toFixed(2)}</Text>
           </View>
         </View>
       </View>
@@ -209,18 +224,18 @@ const SePartsDetailsTwo = () => {
         {/* Summary Cards */}
         <View style={styles.summaryContainer}>
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryNumber}>{parts.length}</Text>
+            <Text style={styles.summaryNumber}>{filteredParts.length}</Text>
             <Text style={styles.summaryLabel}>Total Parts</Text>
           </View>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryNumber}>
-              {parts.filter((p: any) => p.installation === true).length}
+              {filteredParts.filter((p: any) => p.installation === true).length}
             </Text>
             <Text style={styles.summaryLabel}>Installed</Text>
           </View>
           <View style={styles.summaryCard}>
             <Text style={styles.summaryNumber}>
-              {parts.filter((p: any) => p.installation === false).length}
+              {filteredParts.filter((p: any) => p.installation === false).length}
             </Text>
             <Text style={styles.summaryLabel}>Removed</Text>
           </View>

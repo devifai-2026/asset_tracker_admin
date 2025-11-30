@@ -24,6 +24,8 @@ interface AssetDetailsSectionProps {
 }
 
 const AssetDetailsSection = ({ assetDetails, isExpanded, onToggle }: AssetDetailsSectionProps) => {
+
+
     return (
         <View style={styles.section}>
             <TouchableOpacity style={styles.sectionHeader} onPress={onToggle}>

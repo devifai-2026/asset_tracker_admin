@@ -59,24 +59,7 @@ const EngineerSection = ({
     const [showDatePickerModal, setShowDatePickerModal] = useState<boolean>(false);
     const [showDateTimePicker, setShowDateTimePicker] = useState<boolean>(false);
 
-    // Initialize form fields with maintenance data
-    // useEffect(() => {
-    //     if (maintenanceData) {
-    //         setBreakdownTitle(maintenanceData.complaint || "");
-    //         setServiceCategory(maintenanceData.types || "");
-    //         setBreakdownType(maintenanceData.complaint_type || "");
-    //         setDescription(maintenanceData.description || "");
-
-    //         // Set selected engineer if available
-    //         if (maintenanceData.service_person && maintenanceData.service_person.length > 0) {
-    //             const engineer = maintenanceData.service_person[0];
-    //             setSelectedEngineer(engineer.name || "");
-    //             setSelectedEngineerId(engineer.id || null);
-    //         }
-    //     }
-    // }, [maintenanceData]);
-
-    // Fetch service persons on component mount
+    
     useEffect(() => {
         fetchServicePersons();
     }, []);
