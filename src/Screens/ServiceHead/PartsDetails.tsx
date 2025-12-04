@@ -600,6 +600,7 @@ const PartsDetails = ({ navigation, route }: any) => {
             </Modal>
 
             {/* Approve Parts Drawer */}
+            {/* Approve Parts Drawer */}
             <Modal
                 visible={showApproveDrawer}
                 animationType="slide"
@@ -620,15 +621,29 @@ const PartsDetails = ({ navigation, route }: any) => {
                             {selectedParts.map((part) => (
                                 <View key={part.id} style={styles.approveItem}>
                                     <View style={styles.approveItemHeader}>
-                                        <View style={styles.partHeader}>
-                                            <Text style={styles.approvePartNumber}>{part.partNo}</Text>
-                                            {part.isLocalPart && (
-                                                <View style={styles.localPartBadge}>
-                                                    <Text style={styles.localPartText}>Local Part</Text>
-                                                </View>
-                                            )}
+                                        <View style={styles.approvePartInfo}>
+                                            <View style={styles.partNumberContainer}>
+                                                <Text
+                                                    style={styles.approvePartNumber}
+                                                    numberOfLines={2}
+                                                    ellipsizeMode="tail"
+                                                >
+                                                    {part.partNo}
+                                                </Text>
+                                                {part.isLocalPart && (
+                                                    <View style={styles.localPartBadge}>
+                                                        <Text style={styles.localPartText}>Local Part</Text>
+                                                    </View>
+                                                )}
+                                            </View>
+                                            <Text
+                                                style={styles.approveRequestedBy}
+                                                numberOfLines={1}
+                                                ellipsizeMode="tail"
+                                            >
+                                                By: {part.requestedBy}
+                                            </Text>
                                         </View>
-                                        <Text style={styles.approveRequestedBy}>By: {part.requestedBy}</Text>
                                     </View>
 
                                     <View style={styles.approveItemDetails}>
@@ -991,7 +1006,7 @@ const styles = StyleSheet.create({
     statusFilterTextActive: {
         color: "#FFFFFF",
     },
-    approveItem: {
+   approveItem: {
         backgroundColor: "#F9F9F9",
         borderRadius: 8,
         padding: 16,
@@ -999,18 +1014,8 @@ const styles = StyleSheet.create({
     },
     approveItemHeader: {
         flexDirection: "row",
-        justifyContent: "space-between",
-        alignItems: "center",
+        alignItems: "flex-start",
         marginBottom: 12,
-    },
-    approvePartNumber: {
-        fontSize: 16,
-        fontWeight: "600",
-        color: "#1A1D29",
-    },
-    approveRequestedBy: {
-        fontSize: 12,
-        color: "#6B7280",
     },
     approveItemDetails: {
         flexDirection: "column",
@@ -1089,14 +1094,6 @@ const styles = StyleSheet.create({
         fontWeight: "600",
         color: "#00BFA5", // Green color for approved quantity
     },
-
-
-
-
-
-
-
-
     partHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -1129,6 +1126,31 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#2E7D32',
         fontWeight: '600',
+    },
+
+
+
+    approvePartInfo: {
+        flex: 1,
+        flexDirection: "column",
+    },
+    partNumberContainer: {
+        flexDirection: "row",
+        alignItems: "center",
+        marginBottom: 4,
+        flexWrap: "wrap",
+    },
+    approvePartNumber: {
+        fontSize: 16,
+        fontWeight: "600",
+        color: "#1A1D29",
+        flex: 1,
+        marginRight: 8,
+    },
+    approveRequestedBy: {
+        fontSize: 12,
+        color: "#6B7280",
+        width: "100%",
     },
 });
 

@@ -289,7 +289,7 @@ const MaintenanceRatingScreen = () => {
 
             console.log("Final Payload:", JSON.stringify(payload, null, 2));
 
-            const response = await authClient.post("/sale-service/set-as-complete-pmc", payload);
+            const response = await authClient.post("/sale-service/set-as-complete-non-pmc", payload);
 
             console.log("API Response:", response);
 

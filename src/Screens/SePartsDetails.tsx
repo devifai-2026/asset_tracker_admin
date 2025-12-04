@@ -100,6 +100,10 @@ const SePartsDetails = () => {
 
     // Helper function to calculate available wallet
     const getAvailableWallet = (part: WalletPart) => {
+        if (part.is_local_part) {
+            // Local parts don't have wallet system, approved quantity is directly available
+            return part.approve_quantity || 0;
+        }
         return (part.already_released || 0) - (part.comsumed_quantity || 0);
     };
 
@@ -110,10 +114,18 @@ const SePartsDetails = () => {
 
     // Helper function to check if part can be selected for installation
     const canSelectPartForInstallation = (part: WalletPart) => {
-        return part.is_approved &&
-            !part.is_removal_part &&
-            part.approve_quantity > 0 &&
-            hasAvailableWallet(part); // ✅ শুধু wallet available থাকলেই install করা যাবে
+        // Basic checks
+        if (!part.is_approved || part.is_removal_part || part.approve_quantity <= 0) {
+            return false;
+        }
+
+        // For local parts: if approved, can be installed
+        if (part.is_local_part) {
+            return true;
+        }
+
+        // For non-local parts: check wallet availability
+        return hasAvailableWallet(part);
     };
 
     const togglePartSelection = (part: WalletPart) => {
@@ -149,19 +161,39 @@ const SePartsDetails = () => {
 
         const quantity = parseInt(numericValue);
         const part = selectedParts.find(p => p.id === partId);
-        const availableWallet = getAvailableWallet(part!);
-        const maxQuantity = Math.min(part?.approve_quantity || 1, availableWallet);
 
-        // Ensure quantity is at least 1
-        const validatedQuantity = Math.max(1, quantity);
+        if (!part) return;
 
-        // Ensure quantity doesn't exceed approved quantity AND available wallet
-        const finalQuantity = Math.min(validatedQuantity, maxQuantity);
+        if (part.is_local_part) {
+            // For local parts: only check against approve_quantity
+            const maxQuantity = part.approve_quantity || 1;
 
-        setQuantityInputs({
-            ...quantityInputs,
-            [partId]: finalQuantity.toString()
-        });
+            // Ensure quantity is at least 1
+            const validatedQuantity = Math.max(1, quantity);
+
+            // Ensure quantity doesn't exceed approved quantity
+            const finalQuantity = Math.min(validatedQuantity, maxQuantity);
+
+            setQuantityInputs({
+                ...quantityInputs,
+                [partId]: finalQuantity.toString()
+            });
+        } else {
+            // For non-local parts: original logic
+            const availableWallet = getAvailableWallet(part);
+            const maxQuantity = Math.min(part?.approve_quantity || 1, availableWallet);
+
+            // Ensure quantity is at least 1
+            const validatedQuantity = Math.max(1, quantity);
+
+            // Ensure quantity doesn't exceed approved quantity AND available wallet
+            const finalQuantity = Math.min(validatedQuantity, maxQuantity);
+
+            setQuantityInputs({
+                ...quantityInputs,
+                [partId]: finalQuantity.toString()
+            });
+        }
     };
 
     // Check if all quantity inputs are valid
@@ -173,11 +205,17 @@ const SePartsDetails = () => {
             }
 
             const quantity = parseInt(quantityStr);
-            const availableWallet = getAvailableWallet(part);
 
-            return quantity >= 1 &&
-                quantity <= part.approve_quantity &&
-                quantity <= availableWallet;
+            if (part.is_local_part) {
+                // For local parts: only check against approve_quantity
+                return quantity >= 1 && quantity <= part.approve_quantity;
+            } else {
+                // For non-local parts: check both approve_quantity and wallet
+                const availableWallet = getAvailableWallet(part);
+                return quantity >= 1 &&
+                    quantity <= part.approve_quantity &&
+                    quantity <= availableWallet;
+            }
         });
     };
 
@@ -198,22 +236,27 @@ const SePartsDetails = () => {
         // Validate quantities
         for (const part of selectedParts) {
             const quantity = parseInt(quantityInputs[part.id]);
-            const availableWallet = getAvailableWallet(part);
 
             if (quantity <= 0) {
                 Alert.alert("Error", `Please enter a valid quantity for part ${part.part_no}`);
                 return;
             }
+
             if (quantity > part.approve_quantity) {
                 Alert.alert("Error", `Cannot install more than approved quantity (${part.approve_quantity}) for part ${part.part_no}`);
                 return;
             }
-            if (quantity > availableWallet) {
-                Alert.alert(
-                    "Insufficient Wallet",
-                    `Available wallet for ${part.part_no} is ${availableWallet}. You cannot install ${quantity} units.`
-                );
-                return;
+
+            if (!part.is_local_part) {
+                // Only check wallet for non-local parts
+                const availableWallet = getAvailableWallet(part);
+                if (quantity > availableWallet) {
+                    Alert.alert(
+                        "Insufficient Wallet",
+                        `Available wallet for ${part.part_no} is ${availableWallet}. You cannot install ${quantity} units.`
+                    );
+                    return;
+                }
             }
         }
 
@@ -320,6 +363,9 @@ const SePartsDetails = () => {
                 getStatusText(part).toLowerCase().includes(query)
             );
         });
+
+
+    console.log("..............", filteredParts)
 
 
     const getStatusColor = (part: WalletPart) => {
@@ -488,7 +534,10 @@ const SePartsDetails = () => {
                                         {canSelectPartForInstallation(item) && (
                                             <View style={styles.walletBadge}>
                                                 <Text style={styles.walletBadgeText}>
-                                                    Wallet: {getAvailableWallet(item)}
+                                                    {item.is_local_part ?
+                                                        `Approved: ${item.approve_quantity}` :
+                                                        `Wallet: ${getAvailableWallet(item)}`
+                                                    }
                                                 </Text>
                                             </View>
                                         )}
@@ -556,55 +605,105 @@ const SePartsDetails = () => {
                                     ) : (
                                         /* For non-removal parts, show all the original fields */
                                         <>
-                                            <View style={styles.detailRow}>
-                                                <Text style={styles.detailLabel}>Requested Quantity:</Text>
-                                                <Text style={styles.detailValue}>{item.requested_quantity || "N/A"}</Text>
-                                            </View>
-                                            <View style={styles.detailRow}>
-                                                <Text style={styles.detailLabel}>Approved Quantity:</Text>
-                                                <Text style={styles.detailValue}>
-                                                    {item.is_approved ? item.approve_quantity : "0"}
-                                                </Text>
-                                            </View>
-                                            <View style={styles.detailRow}>
-                                                <Text style={styles.detailLabel}>Already Released:</Text>
-                                                <Text style={styles.detailValue}>{item.already_released}</Text>
-                                            </View>
-                                            <View style={styles.detailRow}>
-                                                <Text style={styles.detailLabel}>Consumed Quantity:</Text>
-                                                <Text style={styles.detailValue}>{item.comsumed_quantity !== null ? item.comsumed_quantity : "N/A"}</Text>
-                                            </View>
-                                            <View style={styles.detailRow}>
-                                                <Text style={styles.detailLabel}>Available Wallet:</Text>
-                                                <Text style={[styles.detailValue,
-                                                { color: hasAvailableWallet(item) ? '#0FA37F' : '#dc3545', fontWeight: '600' }]}>
-                                                    {getAvailableWallet(item)}
-                                                </Text>
-                                            </View>
-                                            {item.install_quantity !== null && item.install_quantity > 0 && (
-                                                <View style={styles.detailRow}>
-                                                    <Text style={styles.detailLabel}>Already Installed:</Text>
-                                                    <Text style={[styles.detailValue, { color: '#2196F3' }]}>
-                                                        {item.install_quantity}
-                                                    </Text>
-                                                </View>
+                                            {/* Local parts - শুধুমাত্র নির্দিষ্ট fields দেখাবে */}
+                                            {item.is_local_part ? (
+                                                <>
+                                                    <View style={styles.detailRow}>
+                                                        <Text style={styles.detailLabel}>Approved Quantity:</Text>
+                                                        <Text style={styles.detailValue}>
+                                                            {item.is_approved ? item.approve_quantity : "0"}
+                                                        </Text>
+                                                    </View>
+                                                    <View style={styles.detailRow}>
+                                                        <Text style={styles.detailLabel}>Available Approved:</Text>
+                                                        <Text style={[styles.detailValue,
+                                                        { color: getAvailableWallet(item) > 0 ? '#0FA37F' : '#dc3545', fontWeight: '600' }]}>
+                                                            {getAvailableWallet(item)}
+                                                        </Text>
+                                                    </View>
+                                                    {item.install_quantity !== null && item.install_quantity > 0 && (
+                                                        <View style={styles.detailRow}>
+                                                            <Text style={styles.detailLabel}>Already Installed:</Text>
+                                                            <Text style={[styles.detailValue, { color: '#2196F3' }]}>
+                                                                {item.install_quantity}
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                    <View style={styles.detailRow}>
+                                                        <Text style={styles.detailLabel}>Part Inventory ID:</Text>
+                                                        <Text style={styles.detailValue}>{item.part_inventory_id || "N/A"}</Text>
+                                                    </View>
+                                                    <View style={styles.detailRow}>
+                                                        <Text style={styles.detailLabel}>Install Status:</Text>
+                                                        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item) }]}>
+                                                            <Text style={styles.statusText}>{getStatusText(item)}</Text>
+                                                        </View>
+                                                    </View>
+                                                    <View style={styles.detailRow}>
+                                                        <Text style={[styles.detailLabel, { color: '#FF9800', fontWeight: '600' }]}>
+                                                            Local Part:
+                                                        </Text>
+                                                        <Text style={[styles.detailValue, { color: '#FF9800', fontWeight: '600' }]}>
+                                                            Yes (Direct Installation)
+                                                        </Text>
+                                                    </View>
+                                                </>
+                                            ) : (
+                                                /* Non-local parts - সব fields দেখাবে */
+                                                <>
+                                                    <View style={styles.detailRow}>
+                                                        <Text style={styles.detailLabel}>Requested Quantity:</Text>
+                                                        <Text style={styles.detailValue}>{item.requested_quantity || "N/A"}</Text>
+                                                    </View>
+                                                    <View style={styles.detailRow}>
+                                                        <Text style={styles.detailLabel}>Approved Quantity:</Text>
+                                                        <Text style={styles.detailValue}>
+                                                            {item.is_approved ? item.approve_quantity : "0"}
+                                                        </Text>
+                                                    </View>
+                                                    <>
+                                                        <View style={styles.detailRow}>
+                                                            <Text style={styles.detailLabel}>Already Released:</Text>
+                                                            <Text style={styles.detailValue}>{item.already_released}</Text>
+                                                        </View>
+                                                        <View style={styles.detailRow}>
+                                                            <Text style={styles.detailLabel}>Consumed Quantity:</Text>
+                                                            <Text style={styles.detailValue}>{item.comsumed_quantity !== null ? item.comsumed_quantity : "N/A"}</Text>
+                                                        </View>
+                                                    </>
+                                                    <View style={styles.detailRow}>
+                                                        <Text style={styles.detailLabel}>Available Wallet:</Text>
+                                                        <Text style={[styles.detailValue,
+                                                        { color: getAvailableWallet(item) > 0 ? '#0FA37F' : '#dc3545', fontWeight: '600' }]}>
+                                                            {getAvailableWallet(item)}
+                                                        </Text>
+                                                    </View>
+                                                    {item.install_quantity !== null && item.install_quantity > 0 && (
+                                                        <View style={styles.detailRow}>
+                                                            <Text style={styles.detailLabel}>Already Installed:</Text>
+                                                            <Text style={[styles.detailValue, { color: '#2196F3' }]}>
+                                                                {item.install_quantity}
+                                                            </Text>
+                                                        </View>
+                                                    )}
+                                                    <View style={styles.detailRow}>
+                                                        <Text style={styles.detailLabel}>Requested Date:</Text>
+                                                        <Text style={styles.detailValue}>
+                                                            {new Date(item.requested_date).toLocaleDateString()}
+                                                        </Text>
+                                                    </View>
+                                                    <View style={styles.detailRow}>
+                                                        <Text style={styles.detailLabel}>Part Inventory ID:</Text>
+                                                        <Text style={styles.detailValue}>{item.part_inventory_id || "N/A"}</Text>
+                                                    </View>
+                                                    <View style={styles.detailRow}>
+                                                        <Text style={styles.detailLabel}>Install Status:</Text>
+                                                        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item) }]}>
+                                                            <Text style={styles.statusText}>{getStatusText(item)}</Text>
+                                                        </View>
+                                                    </View>
+                                                </>
                                             )}
-                                            <View style={styles.detailRow}>
-                                                <Text style={styles.detailLabel}>Requested Date:</Text>
-                                                <Text style={styles.detailValue}>
-                                                    {new Date(item.requested_date).toLocaleDateString()}
-                                                </Text>
-                                            </View>
-                                            <View style={styles.detailRow}>
-                                                <Text style={styles.detailLabel}>Part Inventory ID:</Text>
-                                                <Text style={styles.detailValue}>{item.part_inventory_id || "N/A"}</Text>
-                                            </View>
-                                            <View style={styles.detailRow}>
-                                                <Text style={styles.detailLabel}>Install Status:</Text>
-                                                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(item) }]}>
-                                                    <Text style={styles.statusText}>{getStatusText(item)}</Text>
-                                                </View>
-                                            </View>
                                         </>
                                     )}
                                 </View>
@@ -661,20 +760,32 @@ const SePartsDetails = () => {
                             renderItem={({ item }) => {
                                 const currentQuantityStr = quantityInputs[item.id] || "";
                                 const currentQuantity = currentQuantityStr ? parseInt(currentQuantityStr) : 0;
-                                const maxQuantity = Math.min(item.approve_quantity, getAvailableWallet(item));
+                                const maxQuantity = item.is_local_part ?
+                                    item.approve_quantity :
+                                    Math.min(item.approve_quantity, getAvailableWallet(item));
                                 const availableWallet = getAvailableWallet(item);
                                 const isQuantityValid = currentQuantity >= 1 &&
                                     currentQuantity <= item.approve_quantity &&
-                                    currentQuantity <= availableWallet;
+                                    (item.is_local_part || currentQuantity <= availableWallet);
 
                                 return (
                                     <View style={styles.drawerPartItem}>
                                         <View style={styles.drawerPartInfo}>
                                             <Text style={styles.drawerPartNo}>{item.part_no}</Text>
                                             <Text style={styles.drawerApprovedQty}>Approved: {item.approve_quantity}</Text>
-                                            <Text style={styles.drawerWalletQty}>Available Wallet: {availableWallet}</Text>
+                                            <Text style={styles.drawerWalletQty}>
+                                                {item.is_local_part ?
+                                                    `Approved Quantity: ${item.approve_quantity}` :
+                                                    `Available Wallet: ${availableWallet}`
+                                                }
+                                            </Text>
                                             {item.install_quantity !== null && item.install_quantity > 0 && (
                                                 <Text style={styles.drawerInstalledQty}>Already Installed: {item.install_quantity}</Text>
+                                            )}
+                                            {item.is_local_part && (
+                                                <Text style={[styles.drawerLocalTag, { color: '#FF9800' }]}>
+                                                    Local Part - Direct Installation
+                                                </Text>
                                             )}
                                         </View>
 
@@ -1105,6 +1216,12 @@ const styles = StyleSheet.create({
         color: "#2196F3",
         marginTop: 2,
         fontWeight: "500",
+    },
+    drawerLocalTag: {
+        fontSize: 12,
+        marginTop: 2,
+        fontWeight: "500",
+        fontStyle: "italic",
     },
     drawerButtons: {
         flexDirection: "row",
