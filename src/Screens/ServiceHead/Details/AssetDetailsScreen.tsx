@@ -214,7 +214,9 @@ const AssetDetailsScreen = ({ navigation, route }: { navigation: any; route: any
         status: maintenanceDetail?.status || "In Progress",
         deadline: formatDate(maintenanceDetail?.ready_date || "NA"),
         engineer: maintenanceDetail?.serviceSalePersons?.[0]?.name || "NA",
-        types: maintenanceDetail?.types || "NA"
+        types: maintenanceDetail?.types || "NA",
+        maintenanceId: maintenanceId,
+        ready_date: maintenanceDetail?.ready_date || null
     };
 
     // Function to handle image tap for full screen view

@@ -63,6 +63,9 @@ const AcceptAssetDetails = () => {
   const [showImageModal, setShowImageModal] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [rating, setRating] = useState<number | null>(null);
+  const [ratingLoading, setRatingLoading] = useState<boolean>(false);
+  const [ratingError, setRatingError] = useState<string | null>(null);
 
   const fetchData = useCallback(() => {
     if (ticket?.id) {
@@ -70,8 +73,6 @@ const AcceptAssetDetails = () => {
     }
   }, [ticket?.id, dispatch]);
 
-
-  console.log("maindetails", maintenanceDetail)
 
   // Use useFocusEffect to refresh data when screen comes into focus
   useFocusEffect(
@@ -106,6 +107,41 @@ const AcceptAssetDetails = () => {
       dispatch(clearCurrentDetail());
     };
   }, [fetchData, dispatch]);
+
+
+  // Fetch Rating data
+  useEffect(() => {
+    const fetchRating = async () => {
+      if (!maintenanceDetail?.id) return;
+
+      setRatingLoading(true);
+      setRatingError(null);
+
+      try {
+        const response = await authClient.get(
+          `${APIEndpoints.getRatings}${maintenanceDetail.id}`
+        );
+
+        if (response.data.msg === "success" && response.data.ratings) {
+          setRating(response.data.ratings.value_rating);
+        }
+      } catch (err) {
+        console.error("Error fetching rating:", err);
+        setRatingError("Failed to load rating");
+      } finally {
+        setRatingLoading(false);
+      }
+    };
+
+    fetchRating();
+  }, [maintenanceDetail?.id]);
+
+  const formatRating = (ratingValue: number | null): string => {
+    if (ratingValue === null || ratingValue === undefined) {
+      return "N/A";
+    }
+    return `${ratingValue.toFixed(2)}/5`;
+  };
 
   // Universal date formatter that handles multiple input formats
   const formatDate = (dateString: string) => {
@@ -450,7 +486,7 @@ const AcceptAssetDetails = () => {
 
       const response = await authClient.post(APIEndpoints.addCommentSale, payload);
 
-      console.log("Add comment response::::::::::", response.data);
+      // console.log("Add comment response::::::::::", response.data);
 
       if (response.data.success || response.data.msg) {
         Alert.alert("Success", response.data.msg || "Comment added successfully");
@@ -610,7 +646,7 @@ const AcceptAssetDetails = () => {
                   <ExpandableText
                     label="Customer"
                     value={lease_customer || "N/A"}
-                    maxLength={30} 
+                    maxLength={30}
                   />
                   <Row label="Rental End Date" value={formatDate(lease_end_date) || "N/A"} />
                   <Row label="Sale Person" value={formatDate(lease_sale_person) || "N/A"} />
@@ -662,6 +698,20 @@ const AcceptAssetDetails = () => {
               }
             />
             <Row label="Deadline" value={formatDate(ready_date)} />
+            <Row
+              label="Rating"
+              value={
+                ratingLoading ? (
+                  <Text style={styles.ratingText}>Loading...</Text>
+                ) : ratingError ? (
+                  <Text style={styles.errorText}>{ratingError}</Text>
+                ) : (
+                  <Text style={styles.ratingText}>
+                    {formatRating(rating)}
+                  </Text>
+                )
+              }
+            />
 
             {/* Description */}
             <View style={styles.descriptionContainer}>
@@ -1400,6 +1450,11 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 10,
   },
+  ratingText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#FF9800", // Orange color for rating
+  }
 });
 
 export default AcceptAssetDetails;

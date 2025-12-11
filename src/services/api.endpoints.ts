@@ -47,4 +47,7 @@ export const APIEndpoints = {
   // sale service
   uploadPhoto: '/sale-service/upload_photo',
   addCommentSale: '/sale-service/add-comment',
+
+  // Ratings
+  getRatings: '/sale-service/ratings?maintenance-id=',
 };

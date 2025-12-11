@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
+import { APIEndpoints } from './../../../services/api.endpoints';
+import { authClient } from "../../../services/api.clients";
 
 interface MaintenanceDetails {
     ticketId: string;
@@ -12,6 +14,17 @@ interface MaintenanceDetails {
     deadline: string;
     engineer: string;
     types: string;
+    ready_date: string | null;
+    maintenanceId: string;
+}
+
+interface RatingData {
+    msg: string;
+    ratings: {
+        maintenance_id: string;
+        sub_value_rating: number;
+        value_rating: number;
+    }
 }
 
 interface MaintenanceDetailsSectionProps {
@@ -19,7 +32,40 @@ interface MaintenanceDetailsSectionProps {
 }
 
 const MaintenanceDetailsSection = ({ maintenance }: MaintenanceDetailsSectionProps) => {
+    const [rating, setRating] = useState<number | null>(null);
+    const [loading, setLoading] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
 
+    console.log("helohelohelohelohelohelohelo", maintenance);
+
+    useEffect(() => {
+        const fetchRating = async () => {
+            if (!maintenance.maintenanceId) return;
+
+            setLoading(true);
+            setError(null);
+
+            try {
+                // Use authClient which already has baseURL and authentication
+                const response = await authClient.get(
+                    APIEndpoints.getRatings + maintenance.maintenanceId
+                );
+
+                const data: RatingData = response.data;
+
+                if (data.msg === "success" && data.ratings) {
+                    setRating(data.ratings.value_rating);
+                }
+            } catch (err) {
+                console.error("Error fetching rating:", err);
+                setError("Failed to load rating");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchRating();
+    }, [maintenance.maintenanceId]);
 
     // Type display mapping function
     const getDisplayType = (type: string) => {
@@ -33,7 +79,14 @@ const MaintenanceDetailsSection = ({ maintenance }: MaintenanceDetailsSectionPro
             "inspection": "Inspection"
         };
 
-        return typeMap[type] || type; 
+        return typeMap[type] || type;
+    };
+
+    const formatRating = (ratingValue: number | null): string => {
+        if (ratingValue === null || ratingValue === undefined) {
+            return "N/A";
+        }
+        return `${ratingValue.toFixed(2)}/5`;
     };
 
     return (
@@ -90,9 +143,22 @@ const MaintenanceDetailsSection = ({ maintenance }: MaintenanceDetailsSectionPro
                     </View>
                     <View style={styles.maintenanceItem}>
                         <Text style={styles.maintenanceLabel}>Deadline</Text>
-                        <Text style={styles.maintenanceValue}>{maintenance.deadline}</Text>
+                        <Text style={styles.maintenanceValue}>{maintenance.ready_date || "N/A"}</Text>
                     </View>
-                    <View style={styles.maintenanceItem} />
+                    <View style={styles.maintenanceItem}>
+                        <Text style={styles.maintenanceLabel}>Rating</Text>
+                        {loading ? (
+                            <Text style={styles.maintenanceValue}>Loading...</Text>
+                        ) : error ? (
+                            <Text style={styles.errorText}>{error}</Text>
+                        ) : (
+                            <View style={styles.ratingTag}>
+                                <Text style={styles.ratingText}>
+                                    {formatRating(rating)}
+                                </Text>
+                            </View>
+                        )}
+                    </View>
                 </View>
             </View>
         </View>
@@ -165,6 +231,23 @@ const styles = StyleSheet.create({
         color: "#1976D2",
         fontSize: 12,
         fontWeight: "600",
+    },
+    ratingTag: {
+        backgroundColor: "#FFF3E0",
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
+        alignSelf: "flex-start",
+    },
+    ratingText: {
+        color: "#FF9800",
+        fontSize: 12,
+        fontWeight: "600",
+    },
+    errorText: {
+        fontSize: 12,
+        color: "#C62828",
+        fontStyle: "italic",
     },
 });
 
