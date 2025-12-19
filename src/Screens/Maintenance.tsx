@@ -21,7 +21,6 @@ import {
   selectMaintenanceLoading,
   selectMaintenanceError,
 } from "../Redux/Slices/maintenanceSlice";
-import { RootState } from "../Redux/store";
 import { logout } from "../Redux/Slices/authSlice";
 import { Header } from "./Header";
 
@@ -134,9 +133,7 @@ export const Maintenance = () => {
     }
   };
 
-  // Filter tickets based on selected tab and search query
-  const filteredTickets = maintenanceList.filter((ticket) => {
-    // Closed tab-এ both closed এবং temporary_closed show করবে
+  const filteredTickets = maintenanceList?.filter((ticket) => {
     const matchesTab = selectedTab === "closed" 
       ? (ticket.status === "closed" || ticket.status === "temporary_closed")
       : ticket.status === selectedTab;

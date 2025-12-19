@@ -14,10 +14,10 @@ export const URLs = {
     apiURL: 'https://api.assets.durbin.co.in',
   },
   [Enviornments.production]: {
-    apiURL: '',
+    apiURL: 'https://api.assets.durbinservices.com',
   },
 };
 
 
 
-export const enviornment = Enviornments.dev;
+export const enviornment = Enviornments.production;
